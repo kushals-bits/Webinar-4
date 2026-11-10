@@ -9,6 +9,7 @@ Curriculum Focus:
 from __future__ import annotations
 
 import io
+import os
 from typing import Any
 
 import cv2
@@ -212,8 +213,11 @@ def analyze_sensor_noise_and_spectral_energy(pil_img: Image.Image) -> dict[str, 
     }
 
 
-def audit_hardware_exif_provenance(pil_img: Image.Image) -> dict[str, Any]:
-    """Inspect camera hardware tags (Make, Model, DateTimeOriginal, Software)."""
+def audit_hardware_exif_provenance(pil_img: Image.Image, filename: str = "") -> dict[str, Any]:
+    """
+    Inspect camera hardware tags (Make, Model, DateTimeOriginal, Software)
+    and C2PA / IPTC XMP metadata for synthetic AI provenance markers.
+    """
     raw_exif = None
     if hasattr(pil_img, "getexif"):
         exif_obj = pil_img.getexif()
@@ -222,18 +226,10 @@ def audit_hardware_exif_provenance(pil_img: Image.Image) -> dict[str, Any]:
     if not raw_exif and hasattr(pil_img, "_getexif"):
         raw_exif = pil_img._getexif()
 
-    if not raw_exif:
-        return {
-            "has_exif": False,
-            "has_hardware": False,
-            "make": None,
-            "model": None,
-            "software": None,
-            "datetime_original": None,
-            "provenance_score": 0.0,
-        }
+    tag_map = {}
+    if raw_exif:
+        tag_map = {ExifTags.TAGS.get(k, k): v for k, v in raw_exif.items() if k in ExifTags.TAGS}
 
-    tag_map = {ExifTags.TAGS.get(k, k): v for k, v in raw_exif.items() if k in ExifTags.TAGS}
     make = str(tag_map.get("Make", "")).strip() or None
     model = str(tag_map.get("Model", "")).strip() or None
     software = str(tag_map.get("Software", "")).strip() or None
@@ -249,35 +245,106 @@ def audit_hardware_exif_provenance(pil_img: Image.Image) -> dict[str, Any]:
     if raw_exif:
         provenance_score += 0.10
 
+    # C2PA / IPTC Standard AI Metadata Audit
+    has_c2pa_ai = False
+    ai_c2pa_source = None
+    ai_publisher = None
+
+    if hasattr(pil_img, "getxmp"):
+        xmp_dict = pil_img.getxmp()
+        if xmp_dict:
+            def search_xmp(d):
+                nonlocal has_c2pa_ai, ai_c2pa_source, ai_publisher
+                if isinstance(d, dict):
+                    for k, v in d.items():
+                        k_str = str(k).lower()
+                        v_str = str(v).lower()
+                        if "digitalsourcetype" in k_str or "digitalsourcetype" in v_str:
+                            if "trainedalgorithmicmedia" in v_str or "compositewithtrainedalgorithmicmedia" in v_str:
+                                has_c2pa_ai = True
+                                ai_c2pa_source = "trainedAlgorithmicMedia"
+                        if "publisher" in k_str and not ai_publisher:
+                            ai_publisher = str(v)
+                        search_xmp(v)
+                elif isinstance(d, (list, tuple)):
+                    for item in d:
+                        search_xmp(item)
+
+            search_xmp(xmp_dict)
+
+    if not has_c2pa_ai and "xmp" in pil_img.info:
+        raw_bytes = pil_img.info["xmp"]
+        if isinstance(raw_bytes, bytes):
+            s = raw_bytes.decode("utf-8", errors="ignore")
+            if "trainedAlgorithmicMedia" in s or "compositeWithTrainedAlgorithmicMedia" in s:
+                has_c2pa_ai = True
+                ai_c2pa_source = "trainedAlgorithmicMedia"
+            if "Meta" in s:
+                ai_publisher = "Meta"
+
+    # Container / MIME mismatch
+    format_mismatch = False
+    im_format = (pil_img.format or "").upper()
+    if filename:
+        ext = os.path.splitext(filename)[1].lower()
+        if ext in [".jpg", ".jpeg"] and im_format == "WEBP":
+            format_mismatch = True
+
     return {
-        "has_exif": True,
+        "has_exif": bool(raw_exif),
         "has_hardware": has_hw,
         "make": make,
         "model": model,
         "software": software,
         "datetime_original": dto,
         "provenance_score": min(provenance_score, 1.0),
+        "has_c2pa_ai": has_c2pa_ai,
+        "c2pa_source": ai_c2pa_source,
+        "publisher": ai_publisher,
+        "im_format": im_format,
+        "format_mismatch": format_mismatch,
     }
 
 
-def classify_ai_vs_real_image(pil_img: Image.Image) -> dict[str, Any]:
+def classify_ai_vs_real_image(pil_img: Image.Image, filename: str = "") -> dict[str, Any]:
     """
     Classify whether a submitted dispute image is Generative AI synthetic or real camera capture.
     Combines:
-    1. Hardware EXIF provenance (Make/Model camera signature vs stripped/virtual).
-    2. High-frequency FFT spectral ratio (Nyquist band power roll-off).
-    3. Latent diffusion VAE periodic lattice peakiness (checkerboard harmonics).
-    4. Flat-region CMOS sensor shot noise residual (PRNU).
-    5. Diffusion studio glaze (extreme saturation + cross-channel correlation lock).
+    1. C2PA / IPTC standard metadata provenance (trainedAlgorithmicMedia / Meta / Midjourney / DALL-E).
+    2. Container integrity & format spoofing audit.
+    3. Hardware EXIF provenance (Make/Model camera signature vs stripped/virtual).
+    4. High-frequency FFT spectral ratio (Nyquist band power roll-off).
+    5. Latent diffusion VAE periodic lattice peakiness (checkerboard harmonics).
+    6. Flat-region CMOS sensor shot noise residual (PRNU).
+    7. Diffusion studio glaze (extreme saturation + cross-channel correlation lock).
     """
     spectral = analyze_sensor_noise_and_spectral_energy(pil_img)
-    exif = audit_hardware_exif_provenance(pil_img)
+    exif = audit_hardware_exif_provenance(pil_img, filename=filename)
 
     ai_signals = []
     real_signals = []
     score = 0.0
 
-    # 1. Hardware Provenance Audit
+    # 1. Definitive C2PA / IPTC standard metadata trigger
+    if exif.get("has_c2pa_ai"):
+        pub_info = f" (Engine: {exif['publisher']})" if exif.get('publisher') else ""
+        ai_signals.append(f"C2PA / IPTC DigitalSourceType confirms synthetic media: '{exif['c2pa_source']}'{pub_info}")
+        return {
+            "is_ai_generated": True,
+            "ai_probability": 0.99,
+            "authenticity_confidence": 0.99,
+            "ai_signals": ai_signals,
+            "real_signals": real_signals,
+            "spectral_features": spectral,
+            "exif_provenance": exif,
+        }
+
+    # 2. Container Spoofing Check
+    if exif.get("format_mismatch"):
+        ai_signals.append("Container spoofing detected: JPEG extension but underlying container is WEBP")
+        score += 0.30
+
+    # 3. Hardware Provenance Audit
     if not exif["has_exif"]:
         ai_signals.append("Missing EXIF metadata (Diffusion generators / web downloads strip camera headers)")
         score += 0.30
@@ -288,7 +355,7 @@ def classify_ai_vs_real_image(pil_img: Image.Image) -> dict[str, Any]:
         real_signals.append(f"Authentic physical hardware signature: {exif['make']} {exif['model']}")
         score -= 0.35
 
-    # 2. 2D FFT Nyquist High-Frequency Ratio
+    # 4. 2D FFT Nyquist High-Frequency Ratio
     hf_ratio = spectral["hf_spectral_ratio"]
     if hf_ratio < 0.65:
         ai_signals.append(f"Severe high-frequency spectral deficiency (HF ratio = {hf_ratio:.3f} < 0.65)")
@@ -300,7 +367,7 @@ def classify_ai_vs_real_image(pil_img: Image.Image) -> dict[str, Any]:
         real_signals.append(f"Natural optical lens diffraction sustained spectrum (HF ratio = {hf_ratio:.3f})")
         score -= 0.15
 
-    # 3. High-Frequency Peakiness (Latent Diffusion VAE periodic checkerboard/lattice artifacts)
+    # 5. Latent Diffusion VAE Periodic Checkerboard/Lattice Peakiness
     peakiness = spectral["hf_peakiness"]
     if peakiness > 0.096:
         ai_signals.append(f"Periodic lattice peaks detected in high-frequency ring (Peakiness = {peakiness:.3f} > 0.096)")
@@ -309,7 +376,7 @@ def classify_ai_vs_real_image(pil_img: Image.Image) -> dict[str, Any]:
         real_signals.append(f"Uniform continuous frequency scatter without lattice spikes (Peakiness = {peakiness:.3f})")
         score -= 0.15
 
-    # 4. Sensor Flat-Region Residual (PRNU) vs Synthetic Smoothness
+    # 6. Flat-Region Sensor Shot Noise (PRNU)
     flat_noise = spectral["flat_noise_variance"]
     if flat_noise < 0.1:
         ai_signals.append(f"Unnatural flat smoothness with zero photon shot noise (Flat Var = {flat_noise:.3f})")
@@ -318,7 +385,7 @@ def classify_ai_vs_real_image(pil_img: Image.Image) -> dict[str, Any]:
         real_signals.append(f"Physical CMOS sensor shot noise residual present (Flat Var = {flat_noise:.2f})")
         score -= 0.10
 
-    # 5. Diffusion Studio Glaze & Color Correlation
+    # 7. Diffusion Studio Glaze & Color Correlation
     sat_mean = spectral["saturation_mean"]
     corr_rg = spectral["corr_rg"]
     corr_rb = spectral["corr_rb"]

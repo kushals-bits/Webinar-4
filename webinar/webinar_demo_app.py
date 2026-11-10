@@ -238,7 +238,8 @@ FOOD_OPTIONS = {
     "Real Food: North Indian Thali (Real Platter)": "Thali.jpeg",
     "Real Food: Deluxe Maharaja Thali (Real Platter)": "Thali_2.jpeg",
     "Real Food: Authentic Mobile Delivery (iPhone 15)": "real_mobile_delivery.jpg",
-    "Synthetic: AI-Generated Indian Thali (User Case / WhatsApp Diffusion)": "whatsapp_ai_test.jpg",
+    "Synthetic: Meta AI Delivery Dish (User Case 2 / C2PA Algorithmic Media)": "whatsapp_ai_test_2.jpg",
+    "Synthetic: AI-Generated Indian Thali (User Case 1 / WhatsApp Diffusion)": "whatsapp_ai_test.jpg",
     "Synthetic: AI-Generated Food (Diffusion Model Fake)": "ai_generated_food.jpg",
 }
 
@@ -469,7 +470,7 @@ food_tensor_inf = inference_transform(clean_food_pil)
 # -----------------------------------------------------------------------------
 
 # Step 1: Detect AI vs. Real image (Lecture 6)
-forensic_res = classify_ai_vs_real_image(food_img)
+forensic_res = classify_ai_vs_real_image(food_img, filename=food_title)
 is_ai = forensic_res["is_ai_generated"]
 ai_prob = forensic_res["ai_probability"]
 
@@ -1051,6 +1052,9 @@ with tabs[1]:
         "EXIF Metadata Present": ex["has_exif"],
         "Camera Hardware Make": ex["make"] or "None / Stripped by Diffusion Tool",
         "Camera Hardware Model": ex["model"] or "None / Virtual Synthesizer",
+        "C2PA / IPTC Synthetic Marker": ex.get("c2pa_source") or "None Detected",
+        "Generative Publisher / Engine": ex.get("publisher") or "None Detected",
+        "Container Format / MIME Mismatch": f"{ex.get('im_format')} (Mismatch: {ex.get('format_mismatch')})",
         "Capture Timestamp": ex["datetime_original"] or "None",
         "Hardware Provenance Score": f"{ex['provenance_score']:.0%}",
         "Active Forensic Triggers": forensic_res["ai_signals"] if is_ai else forensic_res["real_signals"],

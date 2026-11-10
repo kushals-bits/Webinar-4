@@ -397,3 +397,42 @@ class TestAiVsRealClassifier:
         assert decision["total_payout_rs"] == 0.0
         assert decision["is_ai_generated"] is True
 
+    def test_c2pa_meta_ai_image_detected(self, sample_dir):
+        """C2PA / IPTC marked Meta AI image must be detected with high confidence."""
+        from app.core.pytorch_pipeline import classify_ai_vs_real_image
+
+        path = os.path.join(sample_dir, "whatsapp_ai_test_2.jpg")
+        if not os.path.exists(path):
+            pytest.skip("Sample image whatsapp_ai_test_2.jpg not found")
+
+        img = Image.open(path)
+        verdict = classify_ai_vs_real_image(img, filename="WhatsApp Image 2026-11-10 at 7.12.58 PM.jpg")
+        assert verdict["is_ai_generated"] is True
+        assert verdict["ai_probability"] >= 0.95
+        assert any("C2PA" in s or "trainedalgorithmicmedia" in s.lower() for s in verdict["ai_signals"])
+
+    def test_c2pa_adjudicate_rejects_refund(self, sample_dir):
+        """Submitting C2PA Meta AI image must immediately lock claim and reject refund."""
+        from app.core.pytorch_pipeline import adjudicate_wrong_food_dispute
+
+        food_p = os.path.join(sample_dir, "whatsapp_ai_test_2.jpg")
+        bill_p = os.path.join(sample_dir, "delivery_receipt_bill.jpg")
+        if not (os.path.exists(food_p) and os.path.exists(bill_p)):
+            pytest.skip("Sample images not found")
+
+        order_img = Image.open(food_p)
+        bill_img = Image.open(bill_p)
+
+        decision = adjudicate_wrong_food_dispute(
+            order_image=order_img,
+            bill_image=bill_img,
+            order_id="ORD-C2PA-FRAUD",
+            customer_id="CUST-1002",
+            billed_items=[{"name": "Masala Dosa", "qty": 1, "unit_price": 160.0}],
+            reported_dish_observed="Thali",
+        )
+        assert decision["status"] == "REJECTED_SYNTHETIC_FRAUD"
+        assert decision["refund_approved"] is False
+        assert decision["total_payout_rs"] == 0.0
+        assert decision["is_ai_generated"] is True
+
