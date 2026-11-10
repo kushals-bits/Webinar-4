@@ -226,6 +226,57 @@ def build_pipeline_graphviz_dot(
 
     return "\n".join(dot_lines)
 
+
+def get_tensor_crop_preview(pil_img: Image.Image) -> Image.Image:
+    """Simulates torchvision Resize(256) -> CenterCrop(224) for visualization."""
+    w, h = pil_img.size
+    if w < h:
+        new_w = 256
+        new_h = int(h * (256 / w))
+    else:
+        new_h = 256
+        new_w = int(w * (256 / h))
+    resized = pil_img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+    left = (new_w - 224) // 2
+    top = (new_h - 224) // 2
+    return resized.crop((left, top, left + 224, top + 224))
+
+
+def get_phash_matrix_fig(phash_hex: str):
+    """Converts a 64-bit hex pHash into an 8x8 DCT boolean frequency grid."""
+    try:
+        bit_str = bin(int(phash_hex, 16))[2:].zfill(64)
+        matrix = np.array([int(b) for b in bit_str]).reshape(8, 8)
+    except Exception:
+        matrix = np.zeros((8, 8))
+    fig, ax = plt.subplots(figsize=(2.2, 2.2))
+    ax.imshow(matrix, cmap="Blues", interpolation="nearest")
+    ax.set_title("8x8 DCT Hash Bitplane", fontsize=8, pad=3)
+    ax.axis("off")
+    fig.tight_layout(pad=0.2)
+    return fig
+
+
+def get_fft_spectrum_fig(magnitude_spectrum: np.ndarray):
+    """Plots the 2D FFT Log-Magnitude frequency spectrum."""
+    fig, ax = plt.subplots(figsize=(2.4, 2.2))
+    ax.imshow(magnitude_spectrum, cmap="magma")
+    ax.set_title("2D FFT Log-Magnitude", fontsize=8, pad=3)
+    ax.axis("off")
+    fig.tight_layout(pad=0.2)
+    return fig
+
+
+def get_laplacian_fig(laplacian_mask: np.ndarray):
+    """Plots the Laplacian edge/noise residual mask."""
+    fig, ax = plt.subplots(figsize=(2.4, 2.2))
+    ax.imshow(laplacian_mask, cmap="inferno")
+    ax.set_title("Laplacian Noise Residual", fontsize=8, pad=3)
+    ax.axis("off")
+    fig.tight_layout(pad=0.2)
+    return fig
+
+
 SAMPLE_DIR = os.path.join(os.path.dirname(__file__), "sample_images")
 
 # Available sample assets
@@ -795,8 +846,22 @@ with tabs[0]:
         unsafe_allow_html=True,
     )
 
+    spec = forensic_res.get("spectral_features", {})
+    ex = forensic_res.get("exif_provenance", {})
+    tensor_crop = get_tensor_crop_preview(clean_food_pil)
+
     # 2. Dynamic Pipeline Flowchart (Input -> Processing -> Output)
     st.markdown("#### End-to-End Decision Flowchart (Input ➔ Backend Processing ➔ Output)")
+    flowchart_mode = st.radio(
+        "Decision Pipeline Flowchart View:",
+        [
+            "🖼️ Visual Memory-Map Flowchart (Live Images & Artifacts for Every Stage)",
+            "🔀 Algorithmic Branching Graph (Graphviz Logic Tree)",
+        ],
+        horizontal=True,
+        index=0,
+    )
+
     pipeline_dot = build_pipeline_graphviz_dot(
         food_title=food_title,
         bill_id=bill_id,
@@ -818,17 +883,242 @@ with tabs[0]:
         customer_id=customer_id,
         trust_score=cust_profile.get("trust_score", 0.85),
     )
-    st.graphviz_chart(pipeline_dot, use_container_width=True)
-    st.caption("Color Legend: 🟦 Blue = Ingestion & Tensor Standardization | 🟩 Green = Cleared / Authentic / Approved | 🟥 Red = Synthetic AI / Recycled Fraud / Locked | ⬛ Gray = Bypassed Gate")
+
+    if flowchart_mode.startswith("🖼️ Visual Memory-Map"):
+        # -------------------------------------------------------------
+        # Visual Memory-Mapping Flowchart with Live Images at Every Stage
+        # -------------------------------------------------------------
+        st.caption("Visual pipeline rendering each stage's exact input image, backend mathematical transformation, and output visual artifact for cognitive retention and architecture memory-mapping.")
+
+        # Stage 1 Visual Card
+        with st.container():
+            st.markdown(
+                """
+                <div style="background:#161b22; border-left:4px solid #388bfd; border-radius:6px; padding:10px 14px; margin-bottom:8px;">
+                    <b style="color:#58a6ff; font-size:14px;">STAGE 1: DUAL IMAGE INTAKE & FORMAT NORMALIZATION</b>
+                    <span style="color:#8b949e; font-size:12px; margin-left:12px;">Tag 274 Orientation Transpose & 3-Channel RGB Projection</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            v1_c1, v1_c2, v1_c3 = st.columns([1.2, 1.6, 1.2])
+            with v1_c1:
+                st.markdown("**📥 Stage Inputs (Raw Customer Uploads):**")
+                st.image(clean_food_pil, caption=f"Food Proof ({clean_food_pil.size[0]}x{clean_food_pil.size[1]} px, {len(food_bytes)//1024} KB)", use_container_width=True)
+                st.image(bill_img, caption=f"Bill Receipt ({bill_img.size[0]}x{bill_img.size[1]} px)", use_container_width=True)
+            with v1_c2:
+                st.markdown("**⚙️ Backend Processing (Handout Topic):**")
+                st.markdown("• **EXIF Auto-Transpose:** Orientation Tag 274 evaluated to normalize mobile device rotation.")
+                st.markdown("• **Channel Canonicalization:** Strips alpha transparencies / CMYK and projects onto standard 3-channel RGB canvas.")
+                st.markdown(f"• **Binary Buffer Staging:** Stores raw memory bytes ({len(food_bytes):,} bytes) for downstream hashing.")
+            with v1_c3:
+                st.markdown("**📤 Stage Output (Standardized Canvas):**")
+                st.image(clean_food_pil, caption=f"Standardized RGB Canvas ({clean_food_pil.size[0]}x{clean_food_pil.size[1]} px)", use_container_width=True)
+                st.markdown("<span class='badge-clean'>INGESTED & NORMALIZED</span>", unsafe_allow_html=True)
+
+        st.markdown("<div style='text-align:center; padding:4px 0; font-size:18px; color:#58a6ff;'>⬇️ <b>[Normalized RGB Image Canvas Stream]</b> ⬇️</div>", unsafe_allow_html=True)
+
+        # Stage 2 Visual Card
+        with st.container():
+            st.markdown(
+                """
+                <div style="background:#161b22; border-left:4px solid #388bfd; border-radius:6px; padding:10px 14px; margin-bottom:8px;">
+                    <b style="color:#58a6ff; font-size:14px;">STAGE 2: PYTORCH DATA PIPELINE & TENSOR STANDARDIZATION</b>
+                    <span style="color:#8b949e; font-size:12px; margin-left:12px;">torchvision: Resize(256) ➔ CenterCrop(224) ➔ ToTensor() ➔ Normalize()</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            v2_c1, v2_c2, v2_c3 = st.columns([1.2, 1.6, 1.2])
+            with v2_c1:
+                st.markdown("**📥 Stage Input:**")
+                st.image(clean_food_pil, caption=f"Normalized Canvas ({clean_food_pil.size[0]}x{clean_food_pil.size[1]} px)", use_container_width=True)
+            with v2_c2:
+                st.markdown("**⚙️ Backend Processing (Handout Topic):**")
+                st.markdown(r"• **Aspect-Preserving Resize:** Shortest edge scaled to $256\text{ px}$.")
+                st.markdown(r"• **Spatial Center Crop:** Extracts canonical $224 \times 224$ focal window.")
+                st.markdown(r"• **Intensity Scaling:** Maps integer $[0, 255] \to [0.0, 1.0]$.")
+                st.markdown(r"• **Z-Score Normalization:** $x_{\text{norm}} = \frac{x - \mu}{\sigma}$ using ImageNet stats ($\mu=[0.485, 0.456, 0.406]$, $\sigma=[0.229, 0.224, 0.225]$).")
+            with v2_c3:
+                st.markdown("**📤 Stage Output (Ingestion Tensor):**")
+                st.image(tensor_crop, caption="Center-Cropped 224x224 Ingestion Field", use_container_width=True)
+                st.markdown(f"• **Tensor Shape:** `torch.FloatTensor {list(food_tensor_inf.shape)}`")
+                st.markdown(f"• **Value Range:** `[{food_tensor_inf.min():.2f}, {food_tensor_inf.max():.2f}]`")
+                st.markdown("<span class='badge-clean'>STANDARDIZED TENSOR</span>", unsafe_allow_html=True)
+
+        st.markdown("<div style='text-align:center; padding:4px 0; font-size:18px; color:#58a6ff;'>⬇️ <b>[Standardized PyTorch FloatTensor [3, 224, 224]]</b> ⬇️</div>", unsafe_allow_html=True)
+
+        # Stage 3 Visual Card
+        s3_border = "#da3633" if is_ai else "#238636"
+        s3_title_col = "#ff7b72" if is_ai else "#3fb950"
+        with st.container():
+            st.markdown(
+                f"""
+                <div style="background:#161b22; border-left:4px solid {s3_border}; border-radius:6px; padding:10px 14px; margin-bottom:8px;">
+                    <b style="color:{s3_title_col}; font-size:14px;">STAGE 3: GENERATIVE AI vs. REAL CAMERA FORENSIC ENGINE</b>
+                    <span style="color:#8b949e; font-size:12px; margin-left:12px;">2D FFT Spectral Roll-Off, VAE Lattice Peakiness & PRNU Shot Noise</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            v3_c1, v3_c2, v3_c3 = st.columns([1.2, 1.6, 1.2])
+            with v3_c1:
+                st.markdown("**📥 Stage Input:**")
+                st.image(tensor_crop, caption="224x224 Spatial Luminance Plane", use_container_width=True)
+            with v3_c2:
+                st.markdown("**⚙️ Backend Processing (Handout Topic):**")
+                st.markdown(f"• **2D FFT Nyquist Ring ($r \\ge 0.55$):** Ratio = `{spec.get('hf_spectral_ratio', 0.0):.3f}`")
+                st.markdown(f"• **VAE Lattice Peakiness:** `{spec.get('hf_peakiness', 0.0):.3f}` (Threshold: 0.096)")
+                st.markdown(f"• **CMOS Sensor Shot Noise (PRNU):** `{spec.get('flat_noise_variance', 0.0):.2f}` Var in flat regions.")
+                st.markdown(f"• **C2PA / IPTC Provenance:** `{ex.get('c2pa_source') or 'None'}` (Engine: `{ex.get('publisher') or 'None'}`).")
+            with v3_c3:
+                st.markdown("**📤 Stage Outputs (Frequency & Noise Artifacts):**")
+                f_fft = get_fft_spectrum_fig(spec["magnitude_spectrum"])
+                st.pyplot(f_fft)
+                plt.close(f_fft)
+                f_lap = get_laplacian_fig(spec["laplacian_mask"])
+                st.pyplot(f_lap)
+                plt.close(f_lap)
+                if is_ai:
+                    st.markdown(f"<span class='badge-reject'>🚨 SYNTHETIC AI ({ai_prob:.1%})</span>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<span class='badge-clean'>✅ AUTHENTIC CAMERA ({ai_prob:.1%})</span>", unsafe_allow_html=True)
+
+        if is_ai:
+            st.markdown("<div style='text-align:center; padding:4px 0; font-size:16px; color:#ff7b72;'>🚨 <b>[SYNTHETIC AI FRAUD DETECTED — BYPASSING RECEIPT GATE DIRECTLY TO FRAUD LOCK]</b> 🚨</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='text-align:center; padding:4px 0; font-size:18px; color:#3fb950;'>⬇️ <b>[Authentic Camera Cleared — Proceeding to Tamper & Duplicate Hash Gate]</b> ⬇️</div>", unsafe_allow_html=True)
+
+        # Stage 4 Visual Card
+        s4_border = "#da3633" if is_duplicate_hash else "#238636"
+        s4_title_col = "#ff7b72" if is_duplicate_hash else "#3fb950"
+        with st.container():
+            st.markdown(
+                f"""
+                <div style="background:#161b22; border-left:4px solid {s4_border}; border-radius:6px; padding:10px 14px; margin-bottom:8px;">
+                    <b style="color:{s4_title_col}; font-size:14px;">STAGE 4: DUPLICATE HASH & TAMPERING INTEGRITY AUDIT</b>
+                    <span style="color:#8b949e; font-size:12px; margin-left:12px;">64-bit DCT Perceptual Hashing (pHash) & Screen-Capture Boundary Filter</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            v4_c1, v4_c2, v4_c3 = st.columns([1.2, 1.6, 1.2])
+            with v4_c1:
+                st.markdown("**📥 Stage Input:**")
+                st.image(clean_food_pil, caption=f"Staged Image Stream ({len(food_bytes):,} bytes)", use_container_width=True)
+            with v4_c2:
+                st.markdown("**⚙️ Backend Processing (Handout Topic):**")
+                st.markdown("• **64-bit DCT pHash:** Computes 2D Discrete Cosine Transform on 32x32 luminance tile; retains top 8x8 low-frequency coefficients.")
+                st.markdown(r"• **Hamming Distance Matrix:** $D_H(\text{hash}_A, \text{hash}_B) \le 10$ against fraud registry to detect recycled food images.")
+                st.markdown("• **Screen-Capture Border Filter:** Standard deviation across border pixels to flag monitor/phone screenshots.")
+                st.markdown(f"• **Device Sybil Fingerprint:** `{device_fp}` multi-account clustering.")
+            with v4_c3:
+                st.markdown("**📤 Stage Output (DCT Hash Bitplane):**")
+                f_hash = get_phash_matrix_fig(food_phash)
+                st.pyplot(f_hash)
+                plt.close(f_hash)
+                st.markdown(f"• **pHash Hex:** `{food_phash[:16]}...`")
+                st.markdown(f"• **Registry Match:** {'❌ BLACKLISTED' if is_duplicate_hash else '✅ UNIQUE / CLEAN'}")
+                st.markdown(f"• **Screen Capture:** {'❌ SCREENSHOT' if is_screen_capture else '✅ DIRECT PHOTO'}")
+
+        st.markdown("<div style='text-align:center; padding:4px 0; font-size:18px; color:#58a6ff;'>⬇️ <b>[Integrity Signals & Visual Dish Entity]</b> ⬇️</div>", unsafe_allow_html=True)
+
+        # Stage 5 Visual Card
+        with st.container():
+            st.markdown(
+                """
+                <div style="background:#161b22; border-left:4px solid #388bfd; border-radius:6px; padding:10px 14px; margin-bottom:8px;">
+                    <b style="color:#58a6ff; font-size:14px;">STAGE 5: MULTIMODAL RECEIPT CROSS-VERIFICATION (DISCREPANCY GATE)</b>
+                    <span style="color:#8b949e; font-size:12px; margin-left:12px;">Visual Dish Detection vs. OCR Receipt Manifest Comparison</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            v5_c1, v5_c2, v5_c3 = st.columns([1.2, 1.6, 1.2])
+            with v5_c1:
+                st.markdown("**📥 Stage Inputs:**")
+                st.image(clean_food_pil, caption=f"Observed Plate: {observed_dish}", use_container_width=True)
+                st.image(bill_img, caption=f"Receipt Bill: {bill_id}", use_container_width=True)
+            with v5_c2:
+                st.markdown("**⚙️ Backend Processing (Handout Topic):**")
+                if is_ai:
+                    st.markdown("• **STAGE BYPASSED & LOCKED:** Synthetic AI fraud detected at Stage 3. Claim halted before receipt verification to block illegitimate compensation.")
+                else:
+                    st.markdown(f"• **Observed Dish Entity:** `{observed_dish}`")
+                    st.markdown(f"• **Billed Order Manifest:** `{', '.join(it['name'] for it in billed_manifest)}`")
+                    st.markdown("• **Discrepancy Formula:** `is_wrong_item = observed_dish not in billed_manifest`")
+                    st.markdown(f"• **Entitlement Calculation:** 100% item price (₹{billed_total:.2f}) + ₹49 delivery waiver if wrong item delivered.")
+            with v5_c3:
+                st.markdown("**📤 Stage Output (Discrepancy Verdict):**")
+                if is_ai:
+                    st.markdown("<span class='badge-review'>BYPASSED / LOCKED</span>", unsafe_allow_html=True)
+                    st.markdown("• Entitlement: ₹0.00 (Fraud Lock)")
+                elif is_wrong_item:
+                    st.markdown("<span class='badge-clean'>WRONG FOOD CONFIRMED</span>", unsafe_allow_html=True)
+                    st.markdown(f"• Received **{observed_dish}** instead of **{', '.join(it['name'] for it in billed_manifest)}**")
+                    st.markdown(f"• Approved Compensation: ₹{billed_total + delivery_fee:.2f}")
+                else:
+                    st.markdown("<span class='badge-review'>ORDER MATCHED (NO ERROR)</span>", unsafe_allow_html=True)
+                    st.markdown("• Delivered food matches receipt.")
+
+        st.markdown("<div style='text-align:center; padding:4px 0; font-size:18px; color:#58a6ff;'>⬇️ <b>[Verified Entitlement & Audit Trace]</b> ⬇️</div>", unsafe_allow_html=True)
+
+        # Stage 6 Visual Card
+        s6_border = "#238636" if refund_generated else "#da3633"
+        s6_title_col = "#3fb950" if refund_generated else "#ff7b72"
+        with st.container():
+            st.markdown(
+                f"""
+                <div style="background:#161b22; border-left:4px solid {s6_border}; border-radius:6px; padding:10px 14px; margin-bottom:8px;">
+                    <b style="color:{s6_title_col}; font-size:14px;">STAGE 6: FINAL ADJUDICATION ENGINE & FINANCIAL SETTLEMENT</b>
+                    <span style="color:#8b949e; font-size:12px; margin-left:12px;">Automated Settlement Policy Tree & Customer Ledger Mutation</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            v6_c1, v6_c2, v6_c3 = st.columns([1.2, 1.6, 1.2])
+            with v6_c1:
+                st.markdown("**📥 Stage Input Signals:**")
+                st.markdown(f"• **Forensics:** {'SYNTHETIC' if is_ai else 'AUTHENTIC'}")
+                st.markdown(f"• **Discrepancy:** {'CONFIRMED WRONG' if is_wrong_item else 'MATCHED'}")
+                st.markdown(f"• **Customer Trust:** `{cust_profile.get('trust_score', 0.85):.0%}` ({cust_profile.get('trust_tier', 'Verified')})")
+            with v6_c2:
+                st.markdown("**⚙️ Backend Processing (Handout Topic):**")
+                st.markdown("• **Automated Dispute Resolution Policy Tree:**")
+                st.markdown("  - *Synthetic or Blacklisted:* Hard Reject (₹0.00), log to suspicious activity, slash trust score.")
+                st.markdown("  - *Authentic Camera + Wrong Item:* Approve 100% item refund + 100% delivery fee waiver.")
+                st.markdown("  - *Authentic Camera + Correct Item:* Close claim with ₹0.00 (Order delivered intact).")
+                st.markdown("• **Ledger Mutation:** Persists adjudication decision in customer order history.")
+            with v6_c3:
+                st.markdown("**📤 Final Settlement Certificate:**")
+                st.markdown(
+                    f"""
+                    <div style="background:{'#0d2818' if refund_generated else '#3d1111'}; border:1px solid {s6_border}; border-radius:8px; padding:12px; text-align:center;">
+                        <div style="font-size:11px; color:#8b949e;">ADJUDICATION STATUS</div>
+                        <div style="font-size:14px; font-weight:bold; color:{s6_title_col}; margin:4px 0;">{adjudication_status}</div>
+                        <div style="font-size:11px; color:#8b949e; margin-top:4px;">TOTAL PAYOUT</div>
+                        <div style="font-size:22px; font-weight:bold; color:{'#3fb950' if refund_generated else '#f85149'};">₹{total_payout:.2f}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+    else:
+        # -------------------------------------------------------------
+        # Algorithmic Graphviz Logical Flowchart
+        # -------------------------------------------------------------
+        st.graphviz_chart(pipeline_dot, use_container_width=True)
+        st.caption("Color Legend: 🟦 Blue = Ingestion & Tensor Standardization | 🟩 Green = Cleared / Authentic / Approved | 🟥 Red = Synthetic AI / Recycled Fraud / Locked | ⬛ Gray = Bypassed Gate")
 
     st.markdown("---")
     st.markdown("#### Stage-by-Stage Input, Handout Topic Processing & Output Breakdown")
 
     # Stage 1 Card
-    with st.expander("Stage 1: Dual Image Intake & Format Normalization", expanded=True):
+    with st.expander("Stage 1: Dual Image Intake & Format Normalization", expanded=False):
         s1_c1, s1_c2, s1_c3 = st.columns([1, 1, 1])
         with s1_c1:
             st.markdown("**📥 Stage Input**")
+            st.image(clean_food_pil, caption="Delivered Food", width=140)
+            st.image(bill_img, caption="Receipt Bill", width=140)
             st.markdown(f"• **Delivered Food:** `{food_title}`")
             st.markdown(f"• **Food Dimensions:** `{clean_food_pil.size[0]} x {clean_food_pil.size[1]} px`")
             st.markdown(f"• **Food Raw Bytes:** `{len(food_bytes):,} bytes`")
@@ -840,15 +1130,17 @@ with tabs[0]:
             st.markdown("• **Binary Buffer Staging:** Stores raw memory bytes for downstream hashing.")
         with s1_c3:
             st.markdown("**📤 Stage Output**")
+            st.image(clean_food_pil, caption="Standardized RGB Canvas", width=140)
             st.markdown(f"• **Standardized Canvas:** `PIL.Image RGB ({clean_food_pil.size[0]}x{clean_food_pil.size[1]})`")
             st.markdown("• **Staged Ingestion Buffer:** Ready for PyTorch torchvision tensor conversion.")
             st.markdown("• **Gate Status:** <span class='badge-clean'>INGESTED & NORMALIZED</span>", unsafe_allow_html=True)
 
     # Stage 2 Card
-    with st.expander("Stage 2: PyTorch Deep Learning Ingestion (Tensor Standardization)", expanded=True):
+    with st.expander("Stage 2: PyTorch Deep Learning Ingestion (Tensor Standardization)", expanded=False):
         s2_c1, s2_c2, s2_c3 = st.columns([1, 1, 1])
         with s2_c1:
             st.markdown("**📥 Stage Input**")
+            st.image(clean_food_pil, caption="Normalized Canvas", width=140)
             st.markdown(f"• **Normalized Canvas:** `RGB Image ({clean_food_pil.size[0]} x {clean_food_pil.size[1]})`")
             st.markdown("• **Target Spatial Resolution:** `224 x 224` pixels")
             st.markdown("• **Target Norm:** ImageNet $\\mu$ and $\\sigma$")
@@ -860,31 +1152,34 @@ with tabs[0]:
             st.markdown("• `Normalize()`: Channel-wise zero-mean standardization.")
         with s2_c3:
             st.markdown("**📤 Stage Output**")
+            st.image(tensor_crop, caption="224x224 Tensor Field", width=140)
             st.markdown(f"• **Ingestion Tensor:** `torch.FloatTensor {list(food_tensor_inf.shape)}`")
             st.markdown(f"• **Tensor Value Range:** `[{food_tensor_inf.min():.3f}, {food_tensor_inf.max():.3f}]`")
             st.markdown(f"• **Tensor Dtype:** `{food_tensor_inf.dtype}`")
             st.markdown("• **Gate Status:** <span class='badge-clean'>STANDARDIZED TENSOR</span>", unsafe_allow_html=True)
 
     # Stage 3 Card
-    with st.expander("Stage 3: Generative AI vs. Real Image Forensic Detection Engine", expanded=True):
+    with st.expander("Stage 3: Generative AI vs. Real Image Forensic Detection Engine", expanded=False):
         s3_c1, s3_c2, s3_c3 = st.columns([1, 1, 1])
         with s3_c1:
             st.markdown("**📥 Stage Input**")
+            st.image(tensor_crop, caption="224x224 Spatial Plane", width=140)
             st.markdown("• **PyTorch Tensor:** `[3, 224, 224]`")
             st.markdown("• **Grayscale 2D Matrix:** Spatial frequency analysis")
             st.markdown("• **HSV Chroma Plane:** Color saturation analysis")
             st.markdown("• **EXIF Metadata Table:** Hardware provenance tags")
         with s3_c2:
             st.markdown("**⚙️ Backend Processing (Handout Topic)**")
-            spec = forensic_res["spectral_features"]
-            ex = forensic_res["exif_provenance"]
-            st.markdown(f"• **2D FFT Nyquist Ring ($r \\ge 0.55$):** Ratio = `{spec['hf_spectral_ratio']:.3f}`")
+            st.markdown(f"• **2D FFT Nyquist Ring ($r \\ge 0.55$):** Ratio = `{spec.get('hf_spectral_ratio', 0.0):.3f}`")
             st.markdown(f"• **VAE Lattice Peakiness:** `{spec.get('hf_peakiness', 0.0):.3f}` (Threshold: 0.096)")
             st.markdown(f"• **Flat-Region Sensor Noise (PRNU):** `{spec.get('flat_noise_variance', 0.0):.2f}` Var")
             st.markdown(f"• **Studio Saturation:** `{spec.get('saturation_mean', 0.0):.1f}` | Corr: `{spec.get('corr_rg', 0.0):.2f}`")
             st.markdown(f"• **Hardware EXIF:** `{ex.get('make') or 'None'} {ex.get('model') or ''}`")
         with s3_c3:
             st.markdown("**📤 Stage Output**")
+            exp_fft = get_fft_spectrum_fig(spec["magnitude_spectrum"])
+            st.pyplot(exp_fft)
+            plt.close(exp_fft)
             st.markdown(f"• **Synthetic Probability $P(\\text{{AI}}):$** `{ai_prob:.1%}`")
             st.markdown(f"• **Confidence:** `{forensic_res['authenticity_confidence']:.1%}`")
             if is_ai:
@@ -895,10 +1190,11 @@ with tabs[0]:
                 st.markdown("• **Gating Action:** Cleared to Multimodal Receipt Gate")
 
     # Stage 4 Card
-    with st.expander("Stage 4: Duplicate Hash & Tampering Integrity Audit", expanded=True):
+    with st.expander("Stage 4: Duplicate Hash & Tampering Integrity Audit", expanded=False):
         s4_c1, s4_c2, s4_c3 = st.columns([1, 1, 1])
         with s4_c1:
             st.markdown("**📥 Stage Input**")
+            st.image(clean_food_pil, caption="Staged Ingestion Stream", width=140)
             st.markdown(f"• **Image Stream:** `{len(food_bytes):,} bytes`")
             st.markdown(f"• **Device Fingerprint:** `{device_fp}`")
             st.markdown(f"• **Customer Account ID:** `{customer_id}`")
@@ -910,16 +1206,21 @@ with tabs[0]:
             st.markdown("• **Device Sybil Detection:** Checks multi-account linkage on device ID.")
         with s4_c3:
             st.markdown("**📤 Stage Output**")
+            exp_hash = get_phash_matrix_fig(food_phash)
+            st.pyplot(exp_hash)
+            plt.close(exp_hash)
             st.markdown(f"• **Perceptual Hash:** `{food_phash[:16]}...`")
             st.markdown(f"• **Registry Match:** {'❌ BLACKLISTED' if is_duplicate_hash else '✅ UNIQUE / CLEAN'}")
             st.markdown(f"• **Screen Capture:** {'❌ SCREENSHOT' if is_screen_capture else '✅ DIRECT PHOTO'}")
             st.markdown(f"• **Device Collusion:** {'❌ SYBIL RING' if is_multi_account_fraud else '✅ SINGLE ACCOUNT'}")
 
     # Stage 5 Card
-    with st.expander("Stage 5: Multimodal Receipt Cross-Verification (Discrepancy Gate)", expanded=True):
+    with st.expander("Stage 5: Multimodal Receipt Cross-Verification (Discrepancy Gate)", expanded=False):
         s5_c1, s5_c2, s5_c3 = st.columns([1, 1, 1])
         with s5_c1:
             st.markdown("**📥 Stage Input**")
+            st.image(clean_food_pil, caption=f"Observed: {observed_dish}", width=140)
+            st.image(bill_img, caption="Billed Receipt", width=140)
             st.markdown(f"• **Observed Food Dish:** `{observed_dish}`")
             st.markdown(f"• **Billed Receipt:** `{bill_id}`")
             st.markdown(f"• **Billed Items:** `{', '.join(it['name'] for it in billed_manifest)}`")
@@ -946,7 +1247,7 @@ with tabs[0]:
                 st.markdown("• **Entitlement:** ₹0.00 (Order fulfilled correctly)")
 
     # Stage 6 Card
-    with st.expander("Stage 6: Final Adjudication Engine & Financial Settlement", expanded=True):
+    with st.expander("Stage 6: Final Adjudication Engine & Financial Settlement", expanded=False):
         s6_c1, s6_c2, s6_c3 = st.columns([1, 1, 1])
         with s6_c1:
             st.markdown("**📥 Stage Input**")
@@ -967,6 +1268,7 @@ with tabs[0]:
             st.markdown(f"• **Delivery Waiver Approved:** `₹{waiver:.2f}`")
             st.markdown(f"• **Total Customer Payout:** `₹{total_payout:.2f}`")
             st.markdown(f"• **Executive Decision Reason:** *\"{decision_reason}\"*")
+
 
     with st.expander("View Raw Graphviz DOT Code"):
         st.code(pipeline_dot, language="dot")
