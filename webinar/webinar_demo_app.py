@@ -28,6 +28,7 @@ import torchvision.transforms as T
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "backend"))
 
+from app.core import pytorch_pipeline
 from app.core.pytorch_pipeline import (
     IMAGENET_MEAN,
     IMAGENET_STD,
@@ -45,6 +46,7 @@ from app.database import mock_db
 from app.security import hashing_service
 
 # Hot-reload backend modules to ensure newly defined functions are picked up by Streamlit
+importlib.reload(pytorch_pipeline)
 importlib.reload(mock_db)
 importlib.reload(hashing_service)
 
@@ -93,6 +95,7 @@ FOOD_OPTIONS = {
     "Real Food: North Indian Thali (Real Platter)": "Thali.jpeg",
     "Real Food: Deluxe Maharaja Thali (Real Platter)": "Thali_2.jpeg",
     "Real Food: Authentic Mobile Delivery (iPhone 15)": "real_mobile_delivery.jpg",
+    "Synthetic: AI-Generated Indian Thali (User Case / WhatsApp Diffusion)": "whatsapp_ai_test.jpg",
     "Synthetic: AI-Generated Food (Diffusion Model Fake)": "ai_generated_food.jpg",
 }
 
@@ -343,7 +346,8 @@ billed_total = sum(i["total"] for i in billed_manifest)
 
 if is_ai:
     fraud_type = "AI_GENERATED_SYNTHETIC_IMAGE"
-    decision_reason = f"Diffusion Model synthetic generation detected with {ai_prob:.1%} probability (Photon noise variance: {forensic_res['spectral_features']['noise_variance']:.1f}, Laplacian variance: {forensic_res['spectral_features']['blur_score']:.1f}, FFT roll-off: {forensic_res['spectral_features']['hf_spectral_ratio']:.3f}). Stripped camera EXIF metadata."
+    signals_summary = "; ".join(forensic_res["ai_signals"][:2]) if forensic_res.get("ai_signals") else "Synthetic diffusion characteristics"
+    decision_reason = f"Diffusion Model synthetic generation detected with {ai_prob:.1%} probability. Key forensic markers: {signals_summary}."
     adjudication_status = "REJECTED_SYNTHETIC_FRAUD"
     total_payout = 0.0
     item_refund = 0.0
@@ -561,7 +565,7 @@ summary_data = [
     },
     {
         "Verification Dimension": "3. Generative AI vs. Real Detector",
-        "Evidence Observed from Intake": f"P(AI) = {ai_prob:.1%} | Noise: {forensic_res['spectral_features']['noise_variance']:.1f} | Laplacian: {forensic_res['spectral_features']['blur_score']:.1f}",
+        "Evidence Observed from Intake": f"P(AI) = {ai_prob:.1%} | HF Ratio: {forensic_res['spectral_features']['hf_spectral_ratio']:.3f} | Lattice: {forensic_res['spectral_features'].get('hf_peakiness', 0.0):.3f}",
         "Screening Status": "❌ FAKE (Synthetic AI)" if is_ai else "✅ AUTHENTIC (Real Camera)",
         "Refund Decision Impact": "Hard Reject (₹0.00)" if is_ai else "Cleared to Receipt Discrepancy Gate",
     },
@@ -701,13 +705,38 @@ with tabs[1]:
     st.markdown(f"### Forensic Verdict: {verdict_badge}", unsafe_allow_html=True)
     st.markdown(f"**Synthetic Probability $P(\\text{{AI}})$:** `{ai_prob:.1%}` | **Confidence:** `{forensic_res['authenticity_confidence']:.1%}`")
 
-    f_col1, f_col2, f_col3 = st.columns(3)
+    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
     with f_col1:
-        st.metric("Photon Sensor Noise", f"{forensic_res['spectral_features']['noise_variance']:.1f}", delta="Low/Smooth" if forensic_res['spectral_features']['noise_variance'] < 8.0 else "Camera Grain")
+        st.metric(
+            "Nyquist HF Spectral Ratio",
+            f"{forensic_res['spectral_features']['hf_spectral_ratio']:.3f}",
+            delta="Spectral Deficient" if forensic_res['spectral_features']['hf_spectral_ratio'] < 0.69 else "Sustained Spectrum",
+            delta_color="inverse" if forensic_res['spectral_features']['hf_spectral_ratio'] < 0.69 else "normal",
+        )
     with f_col2:
-        st.metric("Laplacian Edge Variance", f"{forensic_res['spectral_features']['blur_score']:.1f}", delta="Hyper-Smooth" if forensic_res['spectral_features']['blur_score'] < 120 else "Natural Crispness")
+        pk = forensic_res['spectral_features'].get('hf_peakiness', 0.0)
+        st.metric(
+            "HF Lattice Peakiness",
+            f"{pk:.3f}",
+            delta="Lattice Spikes (Diffusion VAE)" if pk > 0.096 else "Continuous Scatter",
+            delta_color="inverse" if pk > 0.096 else "normal",
+        )
     with f_col3:
-        st.metric("FFT High-Frequency Ratio", f"{forensic_res['spectral_features']['hf_spectral_ratio']:.3f}", delta="Spectral Roll-Off" if forensic_res['spectral_features']['hf_spectral_ratio'] < 0.28 else "Sustained Spectrum")
+        fn = forensic_res['spectral_features'].get('flat_noise_variance', 0.0)
+        st.metric(
+            "Flat-Region Shot Noise",
+            f"{fn:.2f}",
+            delta="Hypersmooth Synthetic" if fn < 0.10 else "Physical CMOS PRNU",
+            delta_color="inverse" if fn < 0.10 else "normal",
+        )
+    with f_col4:
+        sat = forensic_res['spectral_features'].get('saturation_mean', 0.0)
+        st.metric(
+            "Studio Glaze Saturation",
+            f"{sat:.1f}",
+            delta="Artificial Studio Sat" if sat > 120.0 else "Natural Daylight",
+            delta_color="inverse" if sat > 120.0 else "normal",
+        )
 
     st.markdown("---")
 

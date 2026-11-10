@@ -129,54 +129,84 @@ def create_dispute_dataloader(
 
 def analyze_sensor_noise_and_spectral_energy(pil_img: Image.Image) -> dict[str, Any]:
     """
-    Evaluate physical camera sensor grain vs. diffusion-model synthetic over-smoothing.
+    Evaluate physical camera sensor grain vs. diffusion-model synthetic over-smoothing and lattice artifacts.
     
     Forensic Indicators:
-    1. Photon Shot Noise (PRNU): High-pass spatial filtering isolates high-frequency grain.
-    2. 2D Fast Fourier Transform (FFT) Spectral Roll-Off:
-       Real photos have sustained high-frequency spectral power across higher radial bands.
-       Diffusion models suffer spectral drop-off or unnatural grid frequencies.
-    3. Laplacian Edge Variance:
-       Quantifies sharpness and second-order derivatives.
+    1. Flat-Region Sensor Shot Noise (PRNU approximation):
+       Evaluates residual variance specifically in low-gradient (flat) regions of the image.
+       Natural CMOS cameras retain physical Poisson photon shot noise even in flat areas, whereas
+       pure diffusion generators produce unnaturally smooth planar regions.
+    2. 2D Fast Fourier Transform (FFT) Nyquist Power Spectrum:
+       Evaluates energy in the high-frequency Nyquist ring (0.55 * nyquist to nyquist).
+       Natural optical lenses sustain diffraction scatter across the outer spectrum.
+    3. High-Frequency Lattice Peakiness (Diffusion Checkerboard Artefacts):
+       Latent diffusion models (Stable Diffusion, Midjourney, Flux) decode latents via deconvolution
+       and transposed convolutions, leaving characteristic high-frequency lattice harmonics (periodic spikes)
+       detected via std(HF_ring) / mean(HF_ring).
+    4. Laplacian Edge Variance:
+       Quantifies second-order derivative sharpness.
+    5. Color Saturation & Cross-Channel Covariance:
+       Measures synthetic studio lighting glaze and inter-channel correlation.
     """
     clean_rgb = pil_img.convert("RGB")
-    arr_gray = cv2.cvtColor(np.array(clean_rgb), cv2.COLOR_RGB2GRAY)
+    arr_rgb = np.array(clean_rgb)
+    arr_gray = cv2.cvtColor(arr_rgb, cv2.COLOR_RGB2GRAY)
+    hsv = cv2.cvtColor(arr_rgb, cv2.COLOR_RGB2HSV)
     h, w = arr_gray.shape
 
     # 1. Laplacian Edge Variance
     laplacian = cv2.Laplacian(arr_gray, cv2.CV_64F)
     blur_score = float(laplacian.var())
 
-    # 2. 2D Fast Fourier Transform (FFT) Power Spectrum
-    f = np.fft.fft2(arr_gray)
-    fshift = np.fft.fftshift(f)
-    magnitude_spectrum = np.log(np.abs(fshift) + 1.0)
-
-    # Measure high-frequency ratio (outer radial ring power vs inner core)
-    center_y, center_x = h // 2, w // 2
-    r_inner = min(h, w) // 8
-    r_outer = min(h, w) // 3
-
+    # 2. 2D Fast Fourier Transform (FFT) Power Spectrum & Radial High-Frequency Energy
+    f = np.fft.fftshift(np.fft.fft2(arr_gray))
+    magnitude_spectrum = np.log1p(np.abs(f))
+    cy, cx = h // 2, w // 2
     y, x = np.ogrid[:h, :w]
-    dist_from_center = np.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+    dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+    nyquist = min(cy, cx)
 
-    inner_mask = dist_from_center <= r_inner
-    outer_mask = (dist_from_center > r_inner) & (dist_from_center <= r_outer)
+    core_mask = dist <= (nyquist * 0.15)
+    high_mask = (dist >= (nyquist * 0.55)) & (dist <= nyquist)
 
-    inner_energy = float(np.mean(magnitude_spectrum[inner_mask])) if np.any(inner_mask) else 1.0
-    outer_energy = float(np.mean(magnitude_spectrum[outer_mask])) if np.any(outer_mask) else 0.0
+    core_energy = float(np.mean(magnitude_spectrum[core_mask])) if np.any(core_mask) else 1.0
+    high_energy = float(np.mean(magnitude_spectrum[high_mask])) if np.any(high_mask) else 0.0
+    hf_ratio = high_energy / max(core_energy, 1e-5)
 
-    hf_ratio = outer_energy / max(inner_energy, 1e-5)
+    # 3. High-Frequency Peakiness (Latent Diffusion VAE periodic lattice/checkerboard artifacts)
+    hf_mag_ring = magnitude_spectrum[high_mask] if np.any(high_mask) else np.array([0.0])
+    hf_peakiness = float(np.std(hf_mag_ring) / max(np.mean(hf_mag_ring), 1e-5))
 
-    # 3. High-Pass Sensor Noise Residual (PRNU approximation)
+    # 4. Sensor Flat-Region Residual (PRNU) vs Texture Noise
+    gx = cv2.Sobel(arr_gray, cv2.CV_64F, 1, 0, ksize=3)
+    gy = cv2.Sobel(arr_gray, cv2.CV_64F, 0, 1, ksize=3)
+    g_mag = np.sqrt(gx**2 + gy**2)
+    flat_thresh = np.percentile(g_mag, 25)
+    flat_mask = g_mag <= flat_thresh
+    med = cv2.medianBlur(arr_gray, 3)
+    residual = cv2.absdiff(arr_gray, med)
+    flat_noise = float(residual[flat_mask].var()) if np.any(flat_mask) else 0.0
+
+    # Global residual variance
     blurred = cv2.GaussianBlur(arr_gray, (5, 5), 0)
-    noise_residual = cv2.absdiff(arr_gray, blurred)
-    noise_variance = float(np.var(noise_residual))
+    noise_variance = float(np.var(cv2.absdiff(arr_gray, blurred)))
+
+    # 5. Studio Glaze & Color Correlation
+    sat = hsv[:, :, 1]
+    sat_mean = float(sat.mean())
+    r, g, b = arr_rgb[:, :, 0], arr_rgb[:, :, 1], arr_rgb[:, :, 2]
+    corr_rg = float(np.corrcoef(r.ravel(), g.ravel())[0, 1]) if r.size > 1 else 0.0
+    corr_rb = float(np.corrcoef(r.ravel(), b.ravel())[0, 1]) if r.size > 1 else 0.0
 
     return {
         "blur_score": round(blur_score, 2),
         "hf_spectral_ratio": round(hf_ratio, 4),
+        "hf_peakiness": round(hf_peakiness, 4),
         "noise_variance": round(noise_variance, 2),
+        "flat_noise_variance": round(flat_noise, 3),
+        "saturation_mean": round(sat_mean, 2),
+        "corr_rg": round(corr_rg, 3),
+        "corr_rb": round(corr_rb, 3),
         "magnitude_spectrum": magnitude_spectrum,
         "laplacian_mask": np.abs(laplacian),
     }
@@ -234,52 +264,71 @@ def classify_ai_vs_real_image(pil_img: Image.Image) -> dict[str, Any]:
     """
     Classify whether a submitted dispute image is Generative AI synthetic or real camera capture.
     Combines:
-    1. Sensor photon noise variance
-    2. High-frequency FFT spectral ratio
-    3. Laplacian edge variance
-    4. Hardware EXIF provenance
+    1. Hardware EXIF provenance (Make/Model camera signature vs stripped/virtual).
+    2. High-frequency FFT spectral ratio (Nyquist band power roll-off).
+    3. Latent diffusion VAE periodic lattice peakiness (checkerboard harmonics).
+    4. Flat-region CMOS sensor shot noise residual (PRNU).
+    5. Diffusion studio glaze (extreme saturation + cross-channel correlation lock).
     """
     spectral = analyze_sensor_noise_and_spectral_energy(pil_img)
     exif = audit_hardware_exif_provenance(pil_img)
 
     ai_signals = []
     real_signals = []
-    synthetic_prob = 0.0
+    score = 0.0
 
-    # 1. Hardware provenance check
+    # 1. Hardware Provenance Audit
     if not exif["has_exif"]:
-        ai_signals.append("Missing EXIF metadata (Diffusion generators strip device headers)")
-        synthetic_prob += 0.35
+        ai_signals.append("Missing EXIF metadata (Diffusion generators / web downloads strip camera headers)")
+        score += 0.30
     elif not exif["has_hardware"]:
         ai_signals.append("Missing camera hardware Make/Model")
-        synthetic_prob += 0.20
+        score += 0.20
     else:
         real_signals.append(f"Authentic physical hardware signature: {exif['make']} {exif['model']}")
-        synthetic_prob -= 0.30
+        score -= 0.35
 
-    # 2. Sensor noise residual (PRNU)
-    if spectral["noise_variance"] < 8.0:
-        ai_signals.append(f"Hypersmooth sensor residual (Noise Var = {spectral['noise_variance']:.1f} < 8.0)")
-        synthetic_prob += 0.35
-    elif spectral["noise_variance"] > 20.0:
-        real_signals.append(f"Physical camera CMOS sensor grain detected (Var = {spectral['noise_variance']:.1f})")
-        synthetic_prob -= 0.20
+    # 2. 2D FFT Nyquist High-Frequency Ratio
+    hf_ratio = spectral["hf_spectral_ratio"]
+    if hf_ratio < 0.65:
+        ai_signals.append(f"Severe high-frequency spectral deficiency (HF ratio = {hf_ratio:.3f} < 0.65)")
+        score += 0.35
+    elif hf_ratio < 0.69:
+        ai_signals.append(f"Diffusion spatial power roll-off in Nyquist ring (HF ratio = {hf_ratio:.3f} < 0.69)")
+        score += 0.20
+    else:
+        real_signals.append(f"Natural optical lens diffraction sustained spectrum (HF ratio = {hf_ratio:.3f})")
+        score -= 0.15
 
-    # 3. Blur score / edge sharpness
-    if spectral["blur_score"] < 120.0:
-        ai_signals.append(f"Low high-frequency edge variance ({spectral['blur_score']:.1f})")
-        synthetic_prob += 0.20
-    elif spectral["blur_score"] > 350.0:
-        real_signals.append(f"High-frequency optical texture crispness ({spectral['blur_score']:.1f})")
-        synthetic_prob -= 0.15
+    # 3. High-Frequency Peakiness (Latent Diffusion VAE periodic checkerboard/lattice artifacts)
+    peakiness = spectral["hf_peakiness"]
+    if peakiness > 0.096:
+        ai_signals.append(f"Periodic lattice peaks detected in high-frequency ring (Peakiness = {peakiness:.3f} > 0.096)")
+        score += 0.30
+    else:
+        real_signals.append(f"Uniform continuous frequency scatter without lattice spikes (Peakiness = {peakiness:.3f})")
+        score -= 0.15
 
-    # 4. FFT spectral ratio
-    if spectral["hf_spectral_ratio"] < 0.28:
-        ai_signals.append(f"Steep high-frequency spectral roll-off ({spectral['hf_spectral_ratio']:.3f})")
-        synthetic_prob += 0.20
+    # 4. Sensor Flat-Region Residual (PRNU) vs Synthetic Smoothness
+    flat_noise = spectral["flat_noise_variance"]
+    if flat_noise < 0.1:
+        ai_signals.append(f"Unnatural flat smoothness with zero photon shot noise (Flat Var = {flat_noise:.3f})")
+        score += 0.25
+    elif flat_noise > 1.0:
+        real_signals.append(f"Physical CMOS sensor shot noise residual present (Flat Var = {flat_noise:.2f})")
+        score -= 0.10
 
-    final_prob = float(np.clip(synthetic_prob, 0.02, 0.98))
-    is_ai = final_prob >= 0.55
+    # 5. Diffusion Studio Glaze & Color Correlation
+    sat_mean = spectral["saturation_mean"]
+    corr_rg = spectral["corr_rg"]
+    corr_rb = spectral["corr_rb"]
+    if sat_mean > 120.0 and corr_rg > 0.92 and corr_rb > 0.80 and not exif["has_hardware"]:
+        ai_signals.append(f"Artificial diffusion studio color glaze & cross-channel lock (Sat={sat_mean:.1f}, Corr={corr_rg:.2f})")
+        score += 0.25
+
+    # Calibrated probability
+    final_prob = float(np.clip(score, 0.02, 0.98))
+    is_ai = final_prob >= 0.50
 
     return {
         "is_ai_generated": is_ai,

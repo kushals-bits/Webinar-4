@@ -321,3 +321,79 @@ class TestReverseImageWebhookMock:
         phash = "z" + "1" * 15
         result = check_reverse_image_webhook(phash)
         assert result["is_indexed_online"] is False
+
+
+# ===========================================================================
+# TestAiVsRealClassifier (Multi-Factor Forensic Detector)
+# ===========================================================================
+
+class TestAiVsRealClassifier:
+    @pytest.fixture
+    def sample_dir(self):
+        return os.path.join(os.path.dirname(__file__), "..", "webinar", "sample_images")
+
+    def test_whatsapp_ai_image_detected(self, sample_dir):
+        """WhatsApp-compressed hyper-realistic AI image must be flagged as AI generated."""
+        from app.core.pytorch_pipeline import classify_ai_vs_real_image
+
+        path = os.path.join(sample_dir, "whatsapp_ai_test.jpg")
+        if not os.path.exists(path):
+            pytest.skip("Sample image whatsapp_ai_test.jpg not found")
+
+        img = Image.open(path)
+        verdict = classify_ai_vs_real_image(img)
+        assert verdict["is_ai_generated"] is True
+        assert verdict["ai_probability"] >= 0.50
+        assert any("Periodic lattice" in s or "lattice" in s.lower() for s in verdict["ai_signals"])
+
+    def test_synthetic_ai_food_detected(self, sample_dir):
+        """Standard synthetic diffusion image must be flagged as AI generated."""
+        from app.core.pytorch_pipeline import classify_ai_vs_real_image
+
+        path = os.path.join(sample_dir, "ai_generated_food.jpg")
+        if not os.path.exists(path):
+            pytest.skip("Sample image ai_generated_food.jpg not found")
+
+        img = Image.open(path)
+        verdict = classify_ai_vs_real_image(img)
+        assert verdict["is_ai_generated"] is True
+        assert verdict["ai_probability"] >= 0.80
+
+    def test_real_camera_food_cleared(self, sample_dir):
+        """Authentic physical mobile capture must be cleared as authentic."""
+        from app.core.pytorch_pipeline import classify_ai_vs_real_image
+
+        path = os.path.join(sample_dir, "real_mobile_delivery.jpg")
+        if not os.path.exists(path):
+            pytest.skip("Sample image real_mobile_delivery.jpg not found")
+
+        img = Image.open(path)
+        verdict = classify_ai_vs_real_image(img)
+        assert verdict["is_ai_generated"] is False
+        assert verdict["ai_probability"] < 0.50
+
+    def test_adjudicate_rejects_ai_image(self, sample_dir):
+        """Adjudication pipeline must reject refund when AI-generated food photo is submitted."""
+        from app.core.pytorch_pipeline import adjudicate_wrong_food_dispute
+
+        food_p = os.path.join(sample_dir, "whatsapp_ai_test.jpg")
+        bill_p = os.path.join(sample_dir, "delivery_receipt_bill.jpg")
+        if not (os.path.exists(food_p) and os.path.exists(bill_p)):
+            pytest.skip("Sample images not found")
+
+        order_img = Image.open(food_p)
+        bill_img = Image.open(bill_p)
+
+        decision = adjudicate_wrong_food_dispute(
+            order_image=order_img,
+            bill_image=bill_img,
+            order_id="ORD-FRAUD-TEST",
+            customer_id="CUST-1001",
+            billed_items=[{"name": "Masala Dosa", "qty": 2, "unit_price": 160.0}],
+            reported_dish_observed="North Indian Thali",
+        )
+        assert decision["status"] == "REJECTED_SYNTHETIC_FRAUD"
+        assert decision["refund_approved"] is False
+        assert decision["total_payout_rs"] == 0.0
+        assert decision["is_ai_generated"] is True
+
