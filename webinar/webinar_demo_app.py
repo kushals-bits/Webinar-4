@@ -432,6 +432,170 @@ adjudication = {
 cust_profile = mock_db.get_customer(customer_id)
 
 # -----------------------------------------------------------------------------
+# Unified Refund Adjudication Decision Message & Master Summary Table
+# -----------------------------------------------------------------------------
+
+refund_generated = adjudication["status"] == "APPROVED_WRONG_ITEM"
+refund_payout = adjudication["total_payout_rs"]
+
+# Prominent Decision Message Banner
+if refund_generated:
+    st.markdown(
+        f"""
+        <div style="background-color: #0d2818; border: 2px solid #238636; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <span style="background: #238636; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 13px;">DECISION VERDICT</span>
+                    <h2 style="margin: 6px 0 0 0; color: #3fb950; font-weight: 800;">REFUND WILL BE GENERATED: YES</h2>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; color: #8b949e; text-transform: uppercase;">Total Payout Approved</div>
+                    <div style="font-size: 26px; color: #3fb950; font-weight: 800;">₹{refund_payout:.2f}</div>
+                </div>
+            </div>
+            <p style="margin: 10px 0 0 0; color: #c9d1d9; font-size: 15px; border-top: 1px solid #23863644; padding-top: 10px;">
+                <b>Message:</b> Full reimbursement of <b>₹{refund_payout:.2f}</b> (₹{adjudication['item_refund_rs']:.2f} food value + full ₹{adjudication['delivery_waiver_rs']:.2f} delivery fee waiver) will be credited to customer <b>{customer_name}</b> ({customer_id}). Authentic physical camera capture verified; food delivered (<b>{observed_dish}</b>) does not match billed items on receipt <b>{bill_id}</b>.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+elif adjudication["status"] == "REJECTED_SYNTHETIC_FRAUD":
+    st.markdown(
+        f"""
+        <div style="background-color: #2b1113; border: 2px solid #da3633; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <span style="background: #da3633; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 13px;">DECISION VERDICT</span>
+                    <h2 style="margin: 6px 0 0 0; color: #f85149; font-weight: 800;">REFUND WILL BE GENERATED: NO (HARD REJECT)</h2>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; color: #8b949e; text-transform: uppercase;">Total Payout Denied</div>
+                    <div style="font-size: 26px; color: #f85149; font-weight: 800;">₹0.00</div>
+                </div>
+            </div>
+            <p style="margin: 10px 0 0 0; color: #c9d1d9; font-size: 15px; border-top: 1px solid #da363344; padding-top: 10px;">
+                <b>Message:</b> No refund will be issued (<b>₹0.00</b>). The uploaded food photograph was detected as an <b>AI-generated synthetic image ({ai_prob:.1%} probability)</b> with unnatural FFT radial roll-off, lack of optical lens noise, and stripped hardware EXIF provenance. Claim locked, pHash blacklisted, and logged to <code>suspicious_activity_log</code>.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+elif adjudication["status"] == "REJECTED_KNOWN_HASH_FRAUD":
+    st.markdown(
+        f"""
+        <div style="background-color: #2b1113; border: 2px solid #da3633; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <span style="background: #da3633; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 13px;">DECISION VERDICT</span>
+                    <h2 style="margin: 6px 0 0 0; color: #f85149; font-weight: 800;">REFUND WILL BE GENERATED: NO (RECYCLED SCAM IMAGE)</h2>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; color: #8b949e; text-transform: uppercase;">Total Payout Denied</div>
+                    <div style="font-size: 26px; color: #f85149; font-weight: 800;">₹0.00</div>
+                </div>
+            </div>
+            <p style="margin: 10px 0 0 0; color: #c9d1d9; font-size: 15px; border-top: 1px solid #da363344; padding-top: 10px;">
+                <b>Message:</b> No refund will be issued (<b>₹0.00</b>). The uploaded food image matches a previously blacklisted perceptual hash from historical fraud syndicates (Hamming distance: {hash_check.get('hamming_distance', 0)} bits). Account escalated to Security Admin Queue.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+elif adjudication["status"] == "REJECTED_MULTI_ACCOUNT_FRAUD":
+    st.markdown(
+        f"""
+        <div style="background-color: #2b1113; border: 2px solid #da3633; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <span style="background: #da3633; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 13px;">DECISION VERDICT</span>
+                    <h2 style="margin: 6px 0 0 0; color: #f85149; font-weight: 800;">REFUND WILL BE GENERATED: NO (MULTI-ACCOUNT COLLUSION)</h2>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; color: #8b949e; text-transform: uppercase;">Total Payout Denied</div>
+                    <div style="font-size: 26px; color: #f85149; font-weight: 800;">₹0.00</div>
+                </div>
+            </div>
+            <p style="margin: 10px 0 0 0; color: #c9d1d9; font-size: 15px; border-top: 1px solid #da363344; padding-top: 10px;">
+                <b>Message:</b> No refund will be issued (<b>₹0.00</b>). Hardware device fingerprint <code>{device_fp}</code> is linked to multiple accounts ({customer_id} and flagged {other_account_on_device}). Sybil ring detected and customer trust score penalized in the database.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        f"""
+        <div style="background-color: #16202e; border: 2px solid #388bfd; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <span style="background: #1f6feb; color: white; padding: 4px 10px; border-radius: 4px; font-weight: 700; font-size: 13px;">DECISION VERDICT</span>
+                    <h2 style="margin: 6px 0 0 0; color: #58a6ff; font-weight: 800;">REFUND WILL BE GENERATED: NO (ACCURATE DELIVERY)</h2>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 12px; color: #8b949e; text-transform: uppercase;">Total Payout</div>
+                    <div style="font-size: 26px; color: #58a6ff; font-weight: 800;">₹0.00</div>
+                </div>
+            </div>
+            <p style="margin: 10px 0 0 0; color: #c9d1d9; font-size: 15px; border-top: 1px solid #388bfd44; padding-top: 10px;">
+                <b>Message:</b> No refund required (<b>₹0.00</b>). Authentic camera capture verified. The meal delivered (<b>{observed_dish}</b>) matches the items billed on the printed receipt. The order was delivered accurately.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# Master Adjudication & Refund Summary Table (Consolidated in One Table)
+summary_data = [
+    {
+        "Verification Dimension": "1. Customer Food Upload",
+        "Evidence Observed from Intake": f"Dish: '{observed_dish}' ({food_title})",
+        "Screening Status": "Ingested",
+        "Refund Decision Impact": "Subject to Authenticity & Forensic Analysis",
+    },
+    {
+        "Verification Dimension": "2. Printed Bill Receipt Upload",
+        "Evidence Observed from Intake": f"Bill: '{bill_id}' ({', '.join(it['name'] for it in billed_manifest)})",
+        "Screening Status": "Verified",
+        "Refund Decision Impact": f"Billed Baseline: ₹{billed_total:.2f} + ₹{delivery_fee:.2f} Delivery",
+    },
+    {
+        "Verification Dimension": "3. Generative AI vs. Real Detector",
+        "Evidence Observed from Intake": f"P(AI) = {ai_prob:.1%} | Noise: {forensic_res['spectral_features']['noise_variance']:.1f} | Laplacian: {forensic_res['spectral_features']['blur_score']:.1f}",
+        "Screening Status": "❌ FAKE (Synthetic AI)" if is_ai else "✅ AUTHENTIC (Real Camera)",
+        "Refund Decision Impact": "Hard Reject (₹0.00)" if is_ai else "Cleared to Receipt Discrepancy Gate",
+    },
+    {
+        "Verification Dimension": "4. Perceptual Hash (pHash) Blacklist",
+        "Evidence Observed from Intake": f"pHash: {food_phash[:16]}... (Distance: {hash_check.get('hamming_distance', 'N/A')})",
+        "Screening Status": "❌ BLACKLISTED MATCH" if is_duplicate_hash else "✅ UNIQUE / CLEAN",
+        "Refund Decision Impact": "Hard Reject (₹0.00)" if is_duplicate_hash else "Cleared",
+    },
+    {
+        "Verification Dimension": "5. Device Hardware Fingerprint",
+        "Evidence Observed from Intake": f"Device: '{device_fp}' (Collusion: {other_account_on_device or 'None'})",
+        "Screening Status": "❌ MULTI-ACCOUNT COLLUSION" if is_multi_account_fraud else "✅ UNIQUE HARDWARE",
+        "Refund Decision Impact": "Hard Reject (₹0.00)" if is_multi_account_fraud else "Cleared",
+    },
+    {
+        "Verification Dimension": "6. Meal Discrepancy Cross-Check",
+        "Evidence Observed from Intake": f"Delivered '{observed_dish}' vs Billed '{', '.join(it['name'] for it in billed_manifest)}'",
+        "Screening Status": "⚠️ WRONG FOOD VERIFIED" if adjudication["status"] == "APPROVED_WRONG_ITEM" else ("ℹ️ CORRECT FOOD" if not (is_ai or is_duplicate_hash or is_multi_account_fraud) else "BLOCKED BY FRAUD"),
+        "Refund Decision Impact": f"100% Item Refund (₹{adjudication['item_refund_rs']:.2f}) + Waiver (₹{adjudication['delivery_waiver_rs']:.2f})" if adjudication["status"] == "APPROVED_WRONG_ITEM" else "₹0.00 Refund",
+    },
+    {
+        "Verification Dimension": "★ FINAL REFUND DECISION",
+        "Evidence Observed from Intake": f"Customer: {customer_name} ({customer_id}) | Order: {order_id}",
+        "Screening Status": "🟢 APPROVED" if refund_generated else "🔴 DENIED / ZERO REFUND",
+        "Refund Decision Impact": f"REFUND GENERATED: {'YES (₹' + f'{refund_payout:.2f}' + ')' if refund_generated else 'NO (₹0.00)'}",
+    },
+]
+
+st.markdown("#### Dispute Adjudication & Refund Decision Table")
+st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
+st.markdown("---")
+
+# -----------------------------------------------------------------------------
 # Main Navigation Tabs
 # -----------------------------------------------------------------------------
 
@@ -655,7 +819,8 @@ with tabs[2]:
     st.dataframe(df_manifest, use_container_width=True)
 
     st.markdown("---")
-    st.markdown("### Automated Adjudication Outcome")
+    st.markdown("### Automated Adjudication Outcome & Decision Table")
+    st.dataframe(pd.DataFrame(summary_data), use_container_width=True, hide_index=True)
 
     if adjudication["status"] == "REJECTED_SYNTHETIC_FRAUD":
         st.error(
