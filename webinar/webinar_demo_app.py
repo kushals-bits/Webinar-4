@@ -40,8 +40,13 @@ from app.core.pytorch_pipeline import (
     get_augmentation_transforms,
     get_inference_transforms,
 )
+import importlib
 from app.database import mock_db
 from app.security import hashing_service
+
+# Hot-reload backend modules to ensure newly defined functions are picked up by Streamlit
+importlib.reload(mock_db)
+importlib.reload(hashing_service)
 
 # Page configuration
 st.set_page_config(
