@@ -11,7 +11,9 @@ Provides:
 """
 from __future__ import annotations
 
+import uuid
 from copy import deepcopy
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 # ---------------------------------------------------------------------------
@@ -399,9 +401,205 @@ def get_order_by_bill_id(bill_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def add_order(order: Dict[str, Any]) -> None:
-    """Store an order in the active orders table."""
-    ACTIVE_ORDERS[order["order_id"]] = deepcopy(order)
+def save_new_customer(
+    customer_name: str,
+    customer_id: Optional[str] = None,
+    email: Optional[str] = None,
+    phone: Optional[str] = None,
+    trust_tier: str = "REGULAR_SILVER",
+    trust_score: float = 0.85,
+    comment: str = "New customer registered via portal",
+    device_fingerprint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create and persist a new customer profile in the database."""
+    cid = customer_id or f"CUST-{uuid.uuid4().hex[:4].upper()}"
+    new_profile = {
+        "customer_id": cid,
+        "customer_name": customer_name,
+        "email": email or f"{customer_name.lower().replace(' ', '.')}@example.com",
+        "phone": phone or "+91-9800000000",
+        "account_created_at": datetime.now().isoformat(),
+        "trust_tier": trust_tier,
+        "trust_score": round(trust_score, 2),
+        "lifetime_orders_count": 0,
+        "dispute_count": 0,
+        "refund_rate_percent": 0.0,
+        "comment": comment,
+        "order_history": [],
+        "associated_device_fingerprints": [device_fingerprint] if device_fingerprint else [],
+    }
+    CUSTOMERS[cid] = deepcopy(new_profile)
+    if device_fingerprint:
+        register_device_fingerprint(device_fingerprint, cid)
+    return deepcopy(new_profile)
+
+
+def add_order(order: Dict[str, Any], sync_customer_history: bool = True) -> Dict[str, Any]:
+    """
+    Store an order in the active orders table.
+    If sync_customer_history is True and customer exists in CUSTOMERS,
+    appends the order to the customer's order_history and increments count.
+    """
+    order_copy = deepcopy(order)
+    order_id = order_copy["order_id"]
+    ACTIVE_ORDERS[order_id] = order_copy
+
+    customer_id = order_copy.get("customer_id")
+    if sync_customer_history and customer_id and customer_id in CUSTOMERS:
+        cust = CUSTOMERS[customer_id]
+        already_in_hist = any(h.get("order_id") == order_id for h in cust.get("order_history", []))
+        if not already_in_hist:
+            cust.setdefault("order_history", []).insert(0, {
+                "order_id": order_id,
+                "bill_id": order_copy.get("bill_id", f"BILL-AUTO-{order_id}"),
+                "order_date": order_copy.get("order_date", datetime.now().isoformat()),
+                "restaurant": order_copy.get("restaurant", "Restaurant"),
+                "grand_total": order_copy.get("grand_total", 0.0),
+                "status": order_copy.get("status", "DELIVERED"),
+                "dispute_filed": order_copy.get("dispute_status", "NONE") != "NONE",
+                "dispute_status": order_copy.get("dispute_status", "NONE"),
+                "comment": order_copy.get("comment", ""),
+            })
+            cust["lifetime_orders_count"] = cust.get("lifetime_orders_count", 0) + 1
+
+    return deepcopy(order_copy)
+
+
+def create_new_order(
+    customer_id: str,
+    restaurant: str,
+    items: List[Dict[str, Any]],
+    order_id: Optional[str] = None,
+    bill_id: Optional[str] = None,
+    restaurant_id: Optional[str] = None,
+    delivery_fee: float = 49.0,
+    platform_fee: float = 5.0,
+    comment: str = "",
+    status: str = "DELIVERED",
+) -> Dict[str, Any]:
+    """
+    Create and store a complete new order record with automatic ID generation,
+    pricing calculations, receipt/bill generation, and customer history synchronization.
+    """
+    cust = CUSTOMERS.get(customer_id)
+    customer_name = cust["customer_name"] if cust else "Guest Customer"
+
+    formatted_items = []
+    items_total = 0.0
+    for it in items:
+        qty = int(it.get("qty", 1))
+        u_price = float(it.get("unit_price", 0.0))
+        i_total = float(it.get("total", qty * u_price))
+        items_total += i_total
+        formatted_items.append({
+            "name": it.get("name", "Food Item"),
+            "qty": qty,
+            "unit_price": u_price,
+            "total": i_total,
+        })
+
+    grand_total = round(items_total + delivery_fee + platform_fee, 2)
+    now_iso = datetime.now().isoformat()
+    auto_seq = uuid.uuid4().hex[:6].upper()
+    gen_order_id = order_id or f"ORD-2026-{auto_seq}"
+    gen_bill_id = bill_id or f"BILL-2026-{auto_seq}"
+
+    new_order = {
+        "order_id": gen_order_id,
+        "customer_id": customer_id,
+        "customer_name": customer_name,
+        "bill_id": gen_bill_id,
+        "order_date": now_iso,
+        "delivery_time": now_iso,
+        "restaurant": restaurant,
+        "restaurant_id": restaurant_id or f"REST-{auto_seq[:4]}",
+        "items": formatted_items,
+        "delivery_fee": delivery_fee,
+        "platform_fee": platform_fee,
+        "grand_total": grand_total,
+        "status": status,
+        "comment": comment,
+        "dispute_status": "NONE",
+    }
+
+    return add_order(new_order, sync_customer_history=True)
+
+
+def record_fraud_incident(
+    customer_id: str,
+    order_id: str,
+    bill_id: str,
+    phash: str,
+    reason: str,
+    risk_score: float,
+) -> Dict[str, Any]:
+    """
+    Audit and log a confirmed fraud attempt:
+    - Adds to suspicious activity log
+    - Blacklists perceptual image hash in historical fraud registry
+    - Flags customer account, increments dispute count, penalizes trust score
+    - Updates order dispute status to REJECTED_FRAUD
+    """
+    log_entry = {
+        "order_id": order_id,
+        "customer_id": customer_id,
+        "bill_id": bill_id,
+        "phash": phash,
+        "reason": reason,
+        "fraud_risk_score": round(risk_score, 4),
+        "action": "HARD_REJECT",
+        "timestamp": datetime.now().isoformat(),
+    }
+    add_to_suspicious_log(log_entry)
+
+    if phash:
+        register_hash(phash, {
+            "customer_id": customer_id,
+            "order_id": order_id,
+            "bill_id": bill_id,
+            "flagged_at": datetime.now().isoformat(),
+            "reason": reason,
+        })
+
+    if order_id in ACTIVE_ORDERS:
+        ACTIVE_ORDERS[order_id]["dispute_status"] = "REJECTED_FRAUD"
+
+    if customer_id in CUSTOMERS:
+        cust = CUSTOMERS[customer_id]
+        cust["dispute_count"] = cust.get("dispute_count", 0) + 1
+        l_orders = max(cust.get("lifetime_orders_count", 1), 1)
+        cust["refund_rate_percent"] = round((cust["dispute_count"] / l_orders) * 100, 1)
+        cust["trust_score"] = max(round(cust.get("trust_score", 0.5) - 0.40, 2), 0.05)
+        if cust["trust_score"] < 0.40:
+            cust["trust_tier"] = "FLAGGED_HIGH_RISK"
+        cust["comment"] = f"CRITICAL: Fraud flagged on {order_id} ({reason}). Score penalized."
+
+        for h in cust.get("order_history", []):
+            if h.get("order_id") == order_id:
+                h["dispute_filed"] = True
+                h["dispute_status"] = "REJECTED_FRAUD"
+                h["comment"] = f"Claim rejected: {reason}"
+
+    return log_entry
+
+
+def record_refund_approval(
+    customer_id: str,
+    order_id: str,
+    refund_amount: float,
+    reason: str,
+) -> None:
+    """Record a verified legitimate refund in the customer and order stores."""
+    if order_id in ACTIVE_ORDERS:
+        ACTIVE_ORDERS[order_id]["dispute_status"] = "RESOLVED_REFUNDED"
+
+    if customer_id in CUSTOMERS:
+        cust = CUSTOMERS[customer_id]
+        for h in cust.get("order_history", []):
+            if h.get("order_id") == order_id:
+                h["dispute_filed"] = True
+                h["dispute_status"] = "RESOLVED_REFUNDED"
+                h["comment"] = f"Refund of ₹{refund_amount:.2f} credited: {reason}"
 
 
 # --- Audit & Security Registry Operations ---

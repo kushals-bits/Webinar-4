@@ -41,6 +41,7 @@ from app.core.pytorch_pipeline import (
     get_inference_transforms,
 )
 from app.database import mock_db
+from app.security import hashing_service
 
 # Page configuration
 st.set_page_config(
@@ -122,6 +123,8 @@ with st.sidebar:
 
     food_img = None
     bill_img = None
+    food_bytes = None
+    bill_bytes = None
     food_title = "Delivered Food"
     bill_title = "Printed Bill"
 
@@ -130,63 +133,164 @@ with st.sidebar:
         food_title = sel_food.split(":")[1].strip() if ":" in sel_food else sel_food
         p_food = os.path.join(SAMPLE_DIR, FOOD_OPTIONS[sel_food])
         if os.path.exists(p_food):
-            food_img = Image.open(p_food)
+            with open(p_food, "rb") as f:
+                food_bytes = f.read()
+            food_img = Image.open(io.BytesIO(food_bytes))
 
         sel_bill = st.selectbox("2. Printed Bill Receipt:", list(BILL_OPTIONS.keys()))
         bill_title = sel_bill
         p_bill = os.path.join(SAMPLE_DIR, BILL_OPTIONS[sel_bill])
         if os.path.exists(p_bill):
-            bill_img = Image.open(p_bill)
+            with open(p_bill, "rb") as f:
+                bill_bytes = f.read()
+            bill_img = Image.open(io.BytesIO(bill_bytes))
+
+        st.markdown("---")
+        st.subheader("Customer & Order Intelligence")
+        all_custs = mock_db.get_all_customers()
+        cust_options = {f"{c['customer_id']} — {c['customer_name']} ({c['trust_tier']})": c['customer_id'] for c in all_custs}
+        default_idx = 3 if len(all_custs) > 3 else 0
+        sel_label = st.selectbox("Customer Profile:", list(cust_options.keys()), index=default_idx)
+        sel_cid = cust_options[sel_label]
+        cust_profile = mock_db.get_customer(sel_cid)
+
+        customer_id = cust_profile["customer_id"]
+        customer_name = cust_profile["customer_name"]
+        device_fp = (cust_profile.get("associated_device_fingerprints") or ["clean_device_mobile"])[0]
+
+        # Active orders for this customer (FK relationship)
+        c_orders = mock_db.get_customer_orders(customer_id)
+        if c_orders:
+            order_opts = {f"{o['order_id']} | Bill: {o['bill_id']} ({o.get('order_date', '')[:10]})": o for o in c_orders}
+            sel_ord_label = st.selectbox("Active Order / Bill ID:", list(order_opts.keys()), index=0)
+            active_order = order_opts[sel_ord_label]
+            order_id = active_order["order_id"]
+            bill_id = active_order["bill_id"]
+            order_date = active_order["order_date"]
+            order_comment = active_order.get("comment", "")
+            billed_manifest = active_order.get("items", [
+                {"name": "Butter Chicken", "qty": 2, "unit_price": 320.0, "total": 640.0},
+                {"name": "Garlic Naan", "qty": 4, "unit_price": 55.0, "total": 220.0},
+                {"name": "Dal Makhani", "qty": 1, "unit_price": 220.0, "total": 220.0},
+            ])
+            delivery_fee = active_order.get("delivery_fee", 49.0)
+        else:
+            order_id = "ORD-2026-904"
+            bill_id = "BILL-2026-9041"
+            order_date = "2026-11-09T18:00:00+05:30"
+            order_comment = "Dispute filed for wrong item delivered."
+            billed_manifest = [
+                {"name": "Butter Chicken", "qty": 2, "unit_price": 320.0, "total": 640.0},
+                {"name": "Garlic Naan", "qty": 4, "unit_price": 55.0, "total": 220.0},
+                {"name": "Dal Makhani", "qty": 1, "unit_price": 220.0, "total": 220.0},
+            ]
+            delivery_fee = 49.0
+
+        customer_claim_text = st.text_area(
+            "Customer Claim / Notes:",
+            value=order_comment or "I ordered Butter Chicken and Garlic Naan, but the delivery bag contained something completely different! Please refund.",
+        )
+
     else:
-        up_food = st.file_uploader("1. Upload Delivered Food Photo:", type=["jpg", "jpeg", "png", "webp", "avif"])
+        # Upload Custom Images with dedicated New Customer Info & DB Ingestion
+        st.markdown("#### 1. Upload Dispute Images")
+        up_food = st.file_uploader("Upload Delivered Food Photo:", type=["jpg", "jpeg", "png", "webp", "avif"])
         if up_food:
-            food_img = Image.open(up_food)
+            food_bytes = up_food.getvalue()
+            food_img = Image.open(io.BytesIO(food_bytes))
             food_title = up_food.name
 
-        up_bill = st.file_uploader("2. Upload Printed Bill Receipt:", type=["jpg", "jpeg", "png", "webp"])
+        up_bill = st.file_uploader("Upload Printed Bill Receipt:", type=["jpg", "jpeg", "png", "webp"])
         if up_bill:
-            bill_img = Image.open(up_bill)
+            bill_bytes = up_bill.getvalue()
+            bill_img = Image.open(io.BytesIO(bill_bytes))
             bill_title = up_bill.name
         elif os.path.exists(os.path.join(SAMPLE_DIR, "delivery_receipt_bill.jpg")):
-            bill_img = Image.open(os.path.join(SAMPLE_DIR, "delivery_receipt_bill.jpg"))
+            with open(os.path.join(SAMPLE_DIR, "delivery_receipt_bill.jpg"), "rb") as f:
+                bill_bytes = f.read()
+            bill_img = Image.open(io.BytesIO(bill_bytes))
             bill_title = "Default Receipt"
 
-    st.markdown("---")
-    st.subheader("Customer & Order Intelligence")
-    all_custs = mock_db.get_all_customers()
-    cust_options = {f"{c['customer_id']} — {c['customer_name']} ({c['trust_tier']})": c['customer_id'] for c in all_custs}
-    default_idx = 3 if len(all_custs) > 3 else 0
-    sel_label = st.selectbox("Customer Profile:", list(cust_options.keys()), index=default_idx)
-    sel_cid = cust_options[sel_label]
-    cust_profile = mock_db.get_customer(sel_cid)
+        st.markdown("---")
+        st.markdown("#### 2. Register New Customer & Order in DB")
+        st.caption("New customer information is persisted to the database and screened for multi-account fraud.")
 
-    customer_id = cust_profile["customer_id"]
-    customer_name = cust_profile["customer_name"]
+        with st.expander("New Customer Registration Fields", expanded=True):
+            new_cust_name = st.text_input("Customer Name:", value="Ananya Sen")
+            new_cust_id = st.text_input("Customer ID (Primary Key):", value="CUST-550")
+            new_email = st.text_input("Email:", value="ananya.sen@example.com")
+            new_phone = st.text_input("Phone:", value="+91-9876543210")
+            new_tier = st.selectbox("Initial Trust Tier:", ["REGULAR_SILVER", "VIP_GOLD", "FLAGGED_HIGH_RISK"], index=0)
+            new_score = st.slider("Initial Trust Score:", 0.0, 1.0, 0.88, 0.01)
 
-    # Active orders for this customer (FK relationship)
-    c_orders = mock_db.get_customer_orders(customer_id)
-    if c_orders:
-        order_opts = {f"{o['order_id']} | Bill: {o['bill_id']} ({o.get('order_date', '')[:10]})": o for o in c_orders}
-        sel_ord_label = st.selectbox("Active Order / Bill ID:", list(order_opts.keys()), index=0)
-        active_order = order_opts[sel_ord_label]
-        order_id = active_order["order_id"]
-        bill_id = active_order["bill_id"]
-        order_date = active_order["order_date"]
-        order_comment = active_order.get("comment", "")
-    else:
-        order_id = st.text_input("Order ID:", value="ORD-2026-904")
-        bill_id = st.text_input("Bill ID:", value="BILL-2026-9041")
-        order_date = "2026-11-09T18:00:00+05:30"
-        order_comment = "Dispute filed for wrong item delivered."
+            st.markdown("**Order & Printed Bill Details**")
+            new_order_id = st.text_input("Order ID:", value="ORD-2026-550")
+            new_bill_id = st.text_input("Physical Bill / Receipt ID:", value="BILL-2026-5501")
+            new_restaurant = st.text_input("Restaurant Name:", value="Royal Tandoor Kitchen")
+            new_item_name = st.text_input("Billed Dish on Receipt:", value="Butter Chicken")
+            new_item_price = st.number_input("Billed Item Price (₹):", value=320.0, step=10.0)
+            new_item_qty = st.number_input("Billed Quantity:", value=2, min_value=1, step=1)
+            new_claim = st.text_area(
+                "Customer Claim Notes:",
+                value="I ordered Butter Chicken and Naan, but delivery bag arrived with a completely different food item! Please refund.",
+            )
 
-    # Customer trust & dispute badge
+            st.markdown("**Device Hardware Fingerprint**")
+            device_preset = st.selectbox(
+                "Simulated Device Hardware:",
+                [
+                    "Clean Mobile Device (dev_browser_ananya_01)",
+                    "Colluding Sybil Device (emu_device_8831 - Shared with Flagged CUST-999)",
+                ],
+                index=0,
+            )
+            device_fp = "emu_device_8831" if "emu_device_8831" in device_preset else "dev_browser_ananya_01"
+
+            save_db_btn = st.button("💾 Persist Customer & Order to DB", use_container_width=True)
+
+        # Persist new customer and order to DB
+        cust_profile = mock_db.get_customer(new_cust_id)
+        if not cust_profile or save_db_btn:
+            cust_profile = mock_db.save_new_customer(
+                customer_name=new_cust_name,
+                customer_id=new_cust_id,
+                email=new_email,
+                phone=new_phone,
+                trust_tier=new_tier,
+                trust_score=new_score,
+                comment=new_claim,
+                device_fingerprint=device_fp,
+            )
+            mock_db.create_new_order(
+                customer_id=new_cust_id,
+                restaurant=new_restaurant,
+                items=[{"name": new_item_name, "qty": int(new_item_qty), "unit_price": float(new_item_price)}],
+                order_id=new_order_id,
+                bill_id=new_bill_id,
+                comment=new_claim,
+            )
+            st.success(f"Customer `{new_cust_name}` ({new_cust_id}) & Order `{new_order_id}` stored in Database!")
+
+        customer_id = cust_profile["customer_id"]
+        customer_name = cust_profile["customer_name"]
+        order_id = new_order_id
+        bill_id = new_bill_id
+        order_date = datetime.now().isoformat()
+        order_comment = new_claim
+        billed_manifest = [
+            {"name": new_item_name, "qty": int(new_item_qty), "unit_price": float(new_item_price), "total": float(new_item_qty * new_item_price)}
+        ]
+        delivery_fee = 49.0
+        customer_claim_text = new_claim
+
+    # Dynamic Customer Trust & Dispute Badge
     score_col = "#3fb950" if cust_profile["trust_score"] > 0.8 else ("#d29922" if cust_profile["trust_score"] > 0.5 else "#f85149")
     st.markdown(
         f"""
         <div style="background:#161b22; border:1px solid #30363d; border-radius:6px; padding:10px; margin-top:8px;">
             <div style="font-size:12px; color:#8b949e;">Customer: <b style="color:#f0f6fc;">{customer_name}</b> ({customer_id})</div>
             <div style="font-size:12px; color:#8b949e;">Bill ID: <b style="color:#58a6ff;">{bill_id}</b></div>
-            <div style="font-size:12px; color:#8b949e;">Order Date: <span>{order_date}</span></div>
+            <div style="font-size:12px; color:#8b949e;">Order Date: <span>{order_date[:10]}</span></div>
             <div style="font-size:12px; color:#8b949e;">Trust Score: <b style="color:{score_col};">{cust_profile['trust_score']:.0%}</b> ({cust_profile['trust_tier']})</div>
             <div style="font-size:11px; color:#8b949e; margin-top:4px;"><i>"{cust_profile.get('comment', '')}"</i></div>
         </div>
@@ -194,46 +298,133 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    customer_claim_text = st.text_area(
-        "Customer Claim / Notes:",
-        value=order_comment or "I ordered Butter Chicken and Garlic Naan, but the delivery bag contained something completely different! Please refund.",
-    )
-
 if food_img is None or bill_img is None:
     st.info("Select or upload both the Delivered Food Photo and the Printed Bill Receipt to begin dispute adjudication.")
     st.stop()
 
+# Ensure raw bytes are ready for hashing & forensic analysis
+if food_bytes is None:
+    buf = io.BytesIO()
+    food_img.convert("RGB").save(buf, format="JPEG")
+    food_bytes = buf.getvalue()
+
 # -----------------------------------------------------------------------------
-# Adjudication Pipeline Execution
+# Fraud Detection & Adjudication Pipeline Execution
 # -----------------------------------------------------------------------------
 
-# Step 1: Detect AI vs. Real image
+# Step 1: Detect AI vs. Real image (Lecture 6)
 forensic_res = classify_ai_vs_real_image(food_img)
 is_ai = forensic_res["is_ai_generated"]
 ai_prob = forensic_res["ai_probability"]
 
-# Order Manifest (What the restaurant bill says was charged)
-billed_manifest = [
-    {"name": "Butter Chicken", "qty": 2, "unit_price": 320.0, "total": 640.0},
-    {"name": "Garlic Naan", "qty": 4, "unit_price": 55.0, "total": 220.0},
-    {"name": "Dal Makhani", "qty": 1, "unit_price": 220.0, "total": 220.0},
-]
+# Step 2: Perceptual Hash (pHash) against Fraud Registry
+food_phash = hashing_service.compute_phash(food_bytes)
+hash_check = hashing_service.check_hash_against_db(food_phash, config_limit=10)
+is_duplicate_hash = hash_check["is_duplicate"]
+matched_hash_entry = hash_check.get("matched_entry")
+
+# Step 3: Multi-Account Device Fingerprint Collusion
+other_account_on_device = mock_db.check_device_multi_account(device_fp, customer_id)
+is_multi_account_fraud = other_account_on_device is not None
+
+# Step 4: Screen capture / stock border artifacts
+screen_check = hashing_service.detect_screen_capture_artifacts(food_bytes)
+is_screen_capture = screen_check.get("is_screen_capture", False)
+
+# Discrepancy & Adjudication Engine
+observed_dish = food_title.split(".")[0].replace("_", " ").title()
+
 billed_total = sum(i["total"] for i in billed_manifest)
-delivery_fee = 49.0
 
-# Observed delivered dish
-observed_dish = food_title.split("(")[0].strip()
+if is_ai:
+    fraud_type = "AI_GENERATED_SYNTHETIC_IMAGE"
+    decision_reason = f"Diffusion Model synthetic generation detected with {ai_prob:.1%} probability (Photon noise variance: {forensic_res['spectral_features']['noise_variance']:.1f}, Laplacian variance: {forensic_res['spectral_features']['blur_score']:.1f}, FFT roll-off: {forensic_res['spectral_features']['hf_spectral_ratio']:.3f}). Stripped camera EXIF metadata."
+    adjudication_status = "REJECTED_SYNTHETIC_FRAUD"
+    total_payout = 0.0
+    item_refund = 0.0
+    waiver = 0.0
+    # Audit to database
+    audit_log = mock_db.record_fraud_incident(
+        customer_id=customer_id,
+        order_id=order_id,
+        bill_id=bill_id,
+        phash=food_phash,
+        reason="AI-generated synthetic food photo uploaded for refund fraud",
+        risk_score=ai_prob,
+    )
+elif is_duplicate_hash:
+    fraud_type = "RECYCLED_BLACKLISTED_IMAGE_HASH"
+    decision_reason = f"Perceptual image hash ({food_phash}) matches previously blacklisted refund fraud record {matched_hash_entry.get('order_id')} (Hamming distance: {hash_check['hamming_distance']})."
+    adjudication_status = "REJECTED_KNOWN_HASH_FRAUD"
+    total_payout = 0.0
+    item_refund = 0.0
+    waiver = 0.0
+    audit_log = mock_db.record_fraud_incident(
+        customer_id=customer_id,
+        order_id=order_id,
+        bill_id=bill_id,
+        phash=food_phash,
+        reason=f"Recycled fraudulent image hash (matched {matched_hash_entry.get('order_id')})",
+        risk_score=0.98,
+    )
+elif is_multi_account_fraud:
+    fraud_type = "MULTI_ACCOUNT_DEVICE_COLLUSION"
+    decision_reason = f"Device fingerprint '{device_fp}' is linked to multiple accounts ({customer_id} and flagged {other_account_on_device}). Sybil ring detected."
+    adjudication_status = "REJECTED_MULTI_ACCOUNT_FRAUD"
+    total_payout = 0.0
+    item_refund = 0.0
+    waiver = 0.0
+    audit_log = mock_db.record_fraud_incident(
+        customer_id=customer_id,
+        order_id=order_id,
+        bill_id=bill_id,
+        phash=food_phash,
+        reason=f"Multi-account device collusion with {other_account_on_device}",
+        risk_score=0.90,
+    )
+else:
+    # Authenticity verified; check wrong food delivery discrepancy
+    billed_names = [it["name"].lower() for it in billed_manifest]
+    is_wrong_item = not any(w in observed_dish.lower() for w in billed_names)
+    if is_wrong_item:
+        fraud_type = "NONE (AUTHENTIC_DELIVERY_ISSUE)"
+        item_refund = sum(it.get("total", it["qty"] * it["unit_price"]) for it in billed_manifest)
+        waiver = delivery_fee
+        total_payout = item_refund + waiver
+        adjudication_status = "APPROVED_WRONG_ITEM"
+        decision_reason = f"Authentic camera capture verified (Noise var: {forensic_res['spectral_features']['noise_variance']:.1f}, Laplacian: {forensic_res['spectral_features']['blur_score']:.1f}). Discrepancy confirmed: Customer received '{observed_dish}', but bill was charged for '{', '.join(it['name'] for it in billed_manifest)}'."
+        mock_db.record_refund_approval(
+            customer_id=customer_id,
+            order_id=order_id,
+            refund_amount=total_payout,
+            reason="Verified wrong meal delivery against receipt bill",
+        )
+    else:
+        fraud_type = "NONE (CORRECT_DELIVERY)"
+        item_refund = 0.0
+        waiver = 0.0
+        total_payout = 0.0
+        adjudication_status = "RESOLVED_CORRECT_DELIVERY"
+        decision_reason = f"Authentic camera capture verified. Delivered meal '{observed_dish}' matches billed items on receipt. No refund issued."
 
-# Run full dispute adjudication
-adjudication = adjudicate_wrong_food_dispute(
-    order_image=food_img,
-    bill_image=bill_img,
-    order_id=order_id,
-    customer_id=customer_id,
-    billed_items=billed_manifest,
-    reported_dish_observed=observed_dish,
-    delivery_fee=delivery_fee,
-)
+adjudication = {
+    "order_id": order_id,
+    "customer_id": customer_id,
+    "status": adjudication_status,
+    "fraud_type": fraud_type,
+    "decision_reason": decision_reason,
+    "observed_dish": observed_dish,
+    "billed_items": billed_manifest,
+    "item_refund_rs": item_refund,
+    "delivery_waiver_rs": waiver,
+    "total_payout_rs": total_payout,
+    "phash": food_phash,
+    "device_fingerprint": device_fp,
+    "ai_probability": ai_prob,
+}
+
+# Re-fetch customer profile to show post-audit database state
+cust_profile = mock_db.get_customer(customer_id)
 
 # -----------------------------------------------------------------------------
 # Main Navigation Tabs
@@ -383,6 +574,35 @@ with tabs[1]:
         "Active Forensic Triggers": forensic_res["ai_signals"] if is_ai else forensic_res["real_signals"],
     })
 
+    st.markdown("---")
+    st.subheader("Multimodal Fraud Intelligence & Blacklist Screening")
+    st.markdown("Evaluating perceptual image hashes against blacklisted syndicates and checking device hardware for multi-accounting sybil rings.")
+
+    sec_c1, sec_c2, sec_c3 = st.columns(3)
+    with sec_c1:
+        st.markdown("**1. Perceptual Hash (pHash) Fingerprint**")
+        st.code(f"pHash: {food_phash}\nDuplicate in Blacklist: {is_duplicate_hash}", language="text")
+        if is_duplicate_hash:
+            st.error(f"🚨 Recycled Image Match! Distance: {hash_check['hamming_distance']} bits (Blacklisted in {matched_hash_entry.get('order_id')})")
+        else:
+            st.success("✅ Clean Unique Hash (Not in blacklist)")
+
+    with sec_c2:
+        st.markdown("**2. Device Fingerprint (Sybil Collusion)**")
+        st.code(f"Device: {device_fp}\nMulti-Account Detected: {is_multi_account_fraud}", language="text")
+        if is_multi_account_fraud:
+            st.error(f"🚨 Collusion Alert! Device shared with {other_account_on_device}")
+        else:
+            st.success("✅ Unique Single-User Device Hardware")
+
+    with sec_c3:
+        st.markdown("**3. Screen Capture / Display Artifacts**")
+        st.code(f"Screen Artifacts: {is_screen_capture}", language="text")
+        if is_screen_capture:
+            st.warning("⚠️ Potential Screenshot / Display Rebroadcast")
+        else:
+            st.success("✅ Natural Optical Capture Clean")
+
 
 # =============================================================================
 # Tab 3: Dispute Adjudication & Refund Engine (Wrong Food Delivery Case)
@@ -434,23 +654,43 @@ with tabs[2]:
 
     if adjudication["status"] == "REJECTED_SYNTHETIC_FRAUD":
         st.error(
-            "🚫 **CLAIM HARD REJECTED (AI-GENERATED IMAGE DETECTED)**\n\n"
-            f"**Reason:** {adjudication['decision_reason']}\n\n"
+            "🚫 **CLAIM HARD REJECTED (AI-GENERATED SYNTHETIC IMAGE DETECTED)**\n\n"
+            f"**Forensic Reason:** {adjudication['decision_reason']}\n\n"
             "• **Refund Approved:** ₹0.00\n"
             "• **Delivery Fee Waiver:** ₹0.00\n"
             "• **Total Payout Issued:** **₹0.00**\n"
-            "• **Security Action:** Order locked, claim logged to `suspicious_activity_log`."
+            "• **Security Action:** Order locked, claim logged to `suspicious_activity_log`, customer trust score penalized."
+        )
+        st.json(adjudication)
+
+    elif adjudication["status"] == "REJECTED_KNOWN_HASH_FRAUD":
+        st.error(
+            "🚫 **CLAIM HARD REJECTED (RECYCLED BLACKLISTED IMAGE FRAUD)**\n\n"
+            f"**Forensic Reason:** {adjudication['decision_reason']}\n\n"
+            "• **Refund Approved:** ₹0.00\n"
+            "• **Total Payout Issued:** **₹0.00**\n"
+            "• **Security Action:** Hash already blacklisted from prior scam syndicate. Account escalated to Security Admin Queue."
+        )
+        st.json(adjudication)
+
+    elif adjudication["status"] == "REJECTED_MULTI_ACCOUNT_FRAUD":
+        st.error(
+            "🚫 **CLAIM HARD REJECTED (MULTI-ACCOUNT DEVICE COLLUSION DETECTED)**\n\n"
+            f"**Forensic Reason:** {adjudication['decision_reason']}\n\n"
+            "• **Refund Approved:** ₹0.00\n"
+            "• **Total Payout Issued:** **₹0.00**\n"
+            "• **Security Action:** Sybil collusion pattern detected. Shared device registry logged to `suspicious_activity_log`."
         )
         st.json(adjudication)
 
     elif adjudication["status"] == "APPROVED_WRONG_ITEM":
         st.success(
             "✅ **AUTHENTIC REAL IMAGE CONFIRMED & WRONG FOOD VERIFIED**\n\n"
-            f"**Reason:** {adjudication['decision_reason']}\n\n"
-            f"• **Food Item Refund:** ₹{adjudication['refund_amount_rs']:.2f} (100% reimbursement)\n"
+            f"**Decision Reason:** {adjudication['decision_reason']}\n\n"
+            f"• **Food Item Refund:** ₹{adjudication['item_refund_rs']:.2f} (100% item value reimbursement)\n"
             f"• **Delivery Fee Waiver:** ₹{adjudication['delivery_waiver_rs']:.2f} (Full ₹49 waiver)\n"
             f"• **TOTAL REFUND APPROVED:** **₹{adjudication['total_payout_rs']:.2f}**\n\n"
-            "• **Action:** Immediate credit to original payment method. Apology notification dispatched."
+            "• **Action:** Immediate credit to customer payment method. Restaurant notified for dispatch error."
         )
         p_c1, p_c2 = st.columns(2)
         with p_c1:
@@ -462,10 +702,35 @@ with tabs[2]:
     else:
         st.info(
             "ℹ️ **REAL IMAGE VERIFIED — NO DISCREPANCY DETECTED**\n\n"
-            f"**Reason:** {adjudication['decision_reason']}\n\n"
+            f"**Decision Reason:** {adjudication['decision_reason']}\n\n"
             "• **Total Refund:** ₹0.00 (Customer received the exact meal billed on receipt)."
         )
         st.json(adjudication)
+
+    st.markdown("---")
+    st.subheader("Live Database Audit & Security Ledger State")
+    st.markdown("Real-time view of database updates, customer trust penalties, and audit log entries:")
+    l_c1, l_c2 = st.columns([1, 1])
+    with l_c1:
+        st.markdown("**Customer Trust Profile in Database (Post-Adjudication)**")
+        updated_cust = mock_db.get_customer(customer_id)
+        if updated_cust:
+            st.json({
+                "Customer ID": updated_cust["customer_id"],
+                "Customer Name": updated_cust["customer_name"],
+                "Trust Tier": updated_cust["trust_tier"],
+                "Trust Score": f"{updated_cust['trust_score']:.0%}",
+                "Dispute Count": updated_cust["dispute_count"],
+                "Refund Rate": f"{updated_cust['refund_rate_percent']:.1f}%",
+                "Database Comment": updated_cust["comment"],
+            })
+    with l_c2:
+        st.markdown("**Recent Suspicious Activity Audit Entries**")
+        susp_log = mock_db.get_suspicious_log()
+        if susp_log:
+            st.dataframe(pd.DataFrame(susp_log[-5:]), use_container_width=True)
+        else:
+            st.info("No suspicious fraud incidents logged. Ledger is clean.")
 
 
 # =============================================================================

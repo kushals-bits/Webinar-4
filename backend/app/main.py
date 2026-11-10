@@ -144,6 +144,34 @@ class AdminQueueItem(BaseModel):
     action: str
 
 
+class CreateCustomerRequest(BaseModel):
+    customer_name: str
+    customer_id: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    trust_tier: str = "REGULAR_SILVER"
+    trust_score: float = 0.85
+    comment: str = "Registered via API"
+    device_fingerprint: str | None = None
+
+
+class OrderItemInput(BaseModel):
+    name: str
+    qty: int = 1
+    unit_price: float
+
+
+class CreateOrderRequest(BaseModel):
+    customer_id: str
+    restaurant: str
+    items: list[OrderItemInput]
+    order_id: str | None = None
+    bill_id: str | None = None
+    delivery_fee: float = 49.0
+    platform_fee: float = 5.0
+    comment: str = ""
+
+
 class AdminQueueResponse(BaseModel):
     queue: list[dict[str, Any]]
     total: int
@@ -165,6 +193,22 @@ async def get_customers() -> dict[str, Any]:
     """Retrieve all customer profiles."""
     customers = mock_db.get_all_customers()
     return {"customers": customers, "total": len(customers)}
+
+
+@app.post("/api/v1/customers", tags=["Customers"], status_code=201)
+async def create_customer(payload: CreateCustomerRequest) -> dict[str, Any]:
+    """Register and store a new customer profile in the database."""
+    cust = mock_db.save_new_customer(
+        customer_name=payload.customer_name,
+        customer_id=payload.customer_id,
+        email=payload.email,
+        phone=payload.phone,
+        trust_tier=payload.trust_tier,
+        trust_score=payload.trust_score,
+        comment=payload.comment,
+        device_fingerprint=payload.device_fingerprint,
+    )
+    return {"message": "Customer created successfully", "customer": cust}
 
 
 @app.get("/api/v1/customers/{customer_id}", tags=["Customers"])
@@ -202,6 +246,29 @@ async def get_order(order_id: str) -> dict[str, Any]:
     if order is None:
         raise HTTPException(status_code=404, detail=f"Order '{order_id}' not found.")
     return {"order_id": order_id, **order}
+
+
+@app.post("/api/v1/orders", tags=["Orders"], status_code=201)
+async def create_order(payload: CreateOrderRequest) -> dict[str, Any]:
+    """Store a new order in the database and automatically synchronize the customer's history."""
+    cust = mock_db.get_customer(payload.customer_id)
+    if not cust:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Customer '{payload.customer_id}' not found. Please create customer first."
+        )
+
+    order = mock_db.create_new_order(
+        customer_id=payload.customer_id,
+        restaurant=payload.restaurant,
+        items=[it.model_dump() for it in payload.items],
+        order_id=payload.order_id,
+        bill_id=payload.bill_id,
+        delivery_fee=payload.delivery_fee,
+        platform_fee=payload.platform_fee,
+        comment=payload.comment,
+    )
+    return {"message": "Order created successfully", "order": order}
 
 
 @app.get("/api/v1/admin/queue", response_model=AdminQueueResponse, tags=["Admin"])

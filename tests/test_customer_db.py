@@ -173,3 +173,82 @@ class TestCustomerFastAPIRoutes:
     def test_get_nonexistent_bill_returns_404(self):
         res = client.get("/api/v1/bills/BILL-FAKE-9999")
         assert res.status_code == 404
+
+    def test_post_create_customer_endpoint(self):
+        payload = {
+            "customer_name": "Test Customer",
+            "customer_id": "CUST-TEST-99",
+            "email": "test@example.com",
+            "phone": "+91-9999999999",
+            "trust_tier": "REGULAR_SILVER",
+            "trust_score": 0.89,
+            "comment": "Automated test customer profile",
+            "device_fingerprint": "test_device_fp_99",
+        }
+        res = client.post("/api/v1/customers", json=payload)
+        assert res.status_code == 201
+        data = res.json()
+        assert data["customer"]["customer_id"] == "CUST-TEST-99"
+        assert data["customer"]["customer_name"] == "Test Customer"
+
+        # Verify it can be retrieved
+        fetch = client.get("/api/v1/customers/CUST-TEST-99")
+        assert fetch.status_code == 200
+        assert fetch.json()["trust_score"] == pytest.approx(0.89)
+
+    def test_post_create_order_endpoint(self):
+        # Create order for the new customer
+        order_payload = {
+            "customer_id": "CUST-TEST-99",
+            "restaurant": "Tandoori Nights",
+            "order_id": "ORD-TEST-99",
+            "bill_id": "BILL-TEST-99",
+            "items": [
+                {"name": "Paneer Tikka", "qty": 2, "unit_price": 250.0},
+                {"name": "Roomali Roti", "qty": 4, "unit_price": 40.0},
+            ],
+            "delivery_fee": 49.0,
+            "platform_fee": 5.0,
+            "comment": "Ring doorbell twice upon arrival",
+        }
+        res = client.post("/api/v1/orders", json=order_payload)
+        assert res.status_code == 201
+        data = res.json()["order"]
+        assert data["order_id"] == "ORD-TEST-99"
+        assert data["bill_id"] == "BILL-TEST-99"
+        assert data["grand_total"] == pytest.approx(500.0 + 160.0 + 49.0 + 5.0)  # 714.0
+
+        # Verify bill lookup works
+        bill_res = client.get("/api/v1/bills/BILL-TEST-99")
+        assert bill_res.status_code == 200
+        assert bill_res.json()["order"]["customer_id"] == "CUST-TEST-99"
+
+        # Verify customer order history is automatically synced
+        cust_res = client.get("/api/v1/customers/CUST-TEST-99")
+        hist = cust_res.json()["order_history"]
+        assert len(hist) >= 1
+        assert hist[0]["bill_id"] == "BILL-TEST-99"
+        assert hist[0]["order_id"] == "ORD-TEST-99"
+
+    def test_record_fraud_incident_penalizes_trust_score(self):
+        """Simulate fraud detection: trust score slashed and incident logged to suspicious ledger."""
+        fraud_entry = mock_db.record_fraud_incident(
+            customer_id="CUST-TEST-99",
+            order_id="ORD-TEST-99",
+            bill_id="BILL-TEST-99",
+            phash="test_fraud_hash_hex_01",
+            reason="AI-generated synthetic food photo uploaded",
+            risk_score=0.96,
+        )
+        assert fraud_entry["action"] == "HARD_REJECT"
+        assert fraud_entry["order_id"] == "ORD-TEST-99"
+
+        # Verify customer trust score was heavily penalized and tier flagged
+        updated_cust = mock_db.get_customer("CUST-TEST-99")
+        assert updated_cust["trust_score"] < 0.60
+        assert updated_cust["dispute_count"] == 1
+
+        # Verify hash was blacklisted
+        assert "test_fraud_hash_hex_01" in mock_db.HISTORICAL_REFUND_HASHES
+
+
