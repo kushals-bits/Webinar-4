@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # FastAPI Dispute Ingestion & Security Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    working_dir: /app/backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - FRAUD_HARD_REJECT_THRESHOLD=0.80
+      - FRAUD_MANUAL_REVIEW_THRESHOLD=0.40
+    volumes:
+      - ./backend:/app/backend
+      - ./Food images:/app/Food images
+    restart: unless-stopped
+
+  # Interactive Streamlit Demonstration Workbench
+  webinar-workbench:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: streamlit run webinar/webinar_demo_app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+    working_dir: /app
+    ports:
+      - "8501:8501"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./webinar:/app/webinar
+      - ./backend:/app/backend
+      - ./Food images:/app/Food images
+    depends_on:
+      - backend
+    restart: unless-stopped
