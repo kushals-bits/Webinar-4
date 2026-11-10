@@ -759,10 +759,8 @@ st.markdown("---")
 
 tabs = st.tabs([
     "Live Backend Decision Pipeline Flow",
-    "Deep Learning Data Pipeline",
     "Generative AI vs. Real Detection",
     "Dispute Adjudication & Refund Engine",
-    "Mathematical Foundations & Formulations",
 ])
 
 # =============================================================================
@@ -974,62 +972,9 @@ with tabs[0]:
 
 
 # =============================================================================
-# Tab 1: PyTorch Data Pipeline & Tensor Batching
+# Tab 1: Generative AI vs. Real Image Detection
 # =============================================================================
 with tabs[1]:
-    st.subheader("Deep Learning Data Pipeline: Tensor Transformations & Batching")
-    st.markdown(
-        "Demonstrating on-the-fly PyTorch preprocessing transformations, channel-wise standardization, and mini-batch tensor assembly."
-    )
-
-    t_col1, t_col2 = st.columns([1, 1])
-
-    with t_col1:
-        st.markdown("**Raw Ingested Image**")
-        st.image(clean_food_pil, caption=f"Raw Ingestion: {clean_food_pil.size[0]}x{clean_food_pil.size[1]} ({clean_food_pil.mode})", width='stretch')
-
-    with t_col2:
-        st.markdown("**Standardized PyTorch Inference Tensor**")
-        st.code(
-            f"PyTorch Inference Tensor:\n"
-            f"Shape       : {list(food_tensor_inf.shape)} [Channels, Height, Width]\n"
-            f"Dtype       : {food_tensor_inf.dtype}\n"
-            f"Value Range : [{food_tensor_inf.min():.3f}, {food_tensor_inf.max():.3f}]\n"
-            f"Mean / Std  : Norm(mean={IMAGENET_MEAN}, std={IMAGENET_STD})\n"
-            f"Pipeline    : Resize(256) -> CenterCrop(224) -> ToTensor() -> Normalize()",
-            language="text",
-        )
-        st.info("Standardizes pixel arrays into zero-mean, unit-variance tensors ready for downstream model inference.")
-
-    st.markdown("---")
-    st.subheader("PyTorch DataLoader Mini-Batch Assembly")
-    st.markdown("Assembling multiple customer claims into a batched tensor pipeline for high-throughput model serving.")
-
-    sample_items = [
-        {"food_image": food_img, "bill_image": bill_img, "order_id": order_id, "food_label": observed_dish, "billed_item": "Butter Chicken"},
-        {"food_image": clean_food_pil, "bill_image": bill_img, "order_id": "ORD-2026-905", "food_label": "Chole Bhature", "billed_item": "Thali"},
-        {"food_image": clean_food_pil, "bill_image": bill_img, "order_id": "ORD-2026-906", "food_label": "Hakka Noodles", "billed_item": "Biryani"},
-        {"food_image": clean_food_pil, "bill_image": bill_img, "order_id": "ORD-2026-907", "food_label": "Penne Pasta", "billed_item": "Pizza"},
-    ]
-
-    dispute_loader = create_dispute_dataloader(sample_items, batch_size=4, shuffle=False)
-    batch = next(iter(dispute_loader))
-
-    b_col1, b_col2 = st.columns(2)
-    with b_col1:
-        st.markdown("**Delivered Food Batch Tensor**")
-        st.metric("Batch Tensor Dimension", str(list(batch["food_tensor"].shape)))
-        st.caption("Dimensions represent: `[Batch Size=4, Channels=3, Height=224, Width=224]`")
-    with b_col2:
-        st.markdown("**Printed Bill Batch Tensor**")
-        st.metric("Bill Tensor Dimension", str(list(batch["bill_tensor"].shape)))
-        st.caption("Standardized bill receipt tensors ready for downstream OCR/vision embeddings.")
-
-
-# =============================================================================
-# Tab 2: Generative AI vs. Real Image Detection
-# =============================================================================
-with tabs[2]:
     st.subheader("Generative AI vs. Real Image Detection Engine")
     st.markdown(
         "Evaluating physical camera sensor noise, 2D Fast Fourier Transform (FFT) high-frequency power, "
@@ -1142,9 +1087,9 @@ with tabs[2]:
 
 
 # =============================================================================
-# Tab 3: Dispute Adjudication & Refund Engine (Wrong Food Delivery Case)
+# Tab 2: Dispute Adjudication & Refund Engine (Wrong Food Delivery Case)
 # =============================================================================
-with tabs[3]:
+with tabs[2]:
     st.subheader("Wrong Food Delivery Dispute Resolution & Refund Engine")
     st.markdown(
         "A multi-tiered decision gate: verifying whether the submitted food photo is AI-generated, "
@@ -1269,36 +1214,3 @@ with tabs[3]:
             st.dataframe(pd.DataFrame(susp_log[-5:]), use_container_width=True)
         else:
             st.info("No suspicious fraud incidents logged. Ledger is clean.")
-
-
-# =============================================================================
-# Tab 4: Mathematical Foundations & Formulations
-# =============================================================================
-with tabs[4]:
-    st.subheader("Technical Reference & Mathematical Formulations")
-
-    st.markdown("### 1. PyTorch Input Tensor Standardization")
-    st.markdown("Channel-wise standardization transforms pixel matrices into standard zero-mean unit-variance tensors:")
-    st.latex(r"z_{c, x, y} = \frac{x_{c, x, y} - \mu_c}{\sigma_c} \quad \text{where } c \in \{R, G, B\}")
-    st.markdown("For ImageNet transfer learning: $\\mu = [0.485, 0.456, 0.406]$, $\\sigma = [0.229, 0.224, 0.225]$.")
-
-    st.markdown("### 2. 2D Fast Fourier Transform (FFT) Power Spectrum")
-    st.markdown("Discrete 2D Fourier transformation isolates spatial frequencies to identify generative AI spectral roll-off:")
-    st.latex(r"F(u, v) = \sum_{x=0}^{M-1} \sum_{y=0}^{N-1} f(x, y) \exp\left[-j 2\pi \left(\frac{ux}{M} + \frac{vy}{N}\right)\right]")
-    st.latex(r"\text{Magnitude Spectrum } |F(u, v)| = \sqrt{\text{Re}(F(u, v))^2 + \text{Im}(F(u, v))^2}")
-
-    st.markdown("### 3. Laplacian Variance for Optical Sharpness")
-    st.markdown("Measures second-order spatial derivatives to differentiate camera sensor grain from synthetic smoothing:")
-    st.latex(r"\nabla^2 I = \begin{bmatrix} 0 & 1 & 0 \\ 1 & -4 & 1 \\ 0 & 1 & 0 \end{bmatrix} * I \quad \implies \quad \text{Blur Score} = \text{Var}(\nabla^2 I)")
-
-    st.markdown("### 4. Wrong Food Delivery Adjudication Matrix")
-    st.markdown(
-        r"""
-        | Step | Verification Gate | Condition | Action & Financial Outcome |
-        |---|---|---|---|
-        | **1** | **Authenticity Gate** | $P(\text{AI}) \ge 0.55$ (Synthetic) | **Hard Reject**: ₹0.00 Refund, claim locked in suspicious log |
-        | **2** | **Authenticity Gate** | $P(\text{AI}) < 0.55$ (Real Camera) | **Pass**: Cleared to Multimodal Receipt Cross-Verification |
-        | **3** | **Item Discrepancy** | Observed Dish $\ne$ Billed Items | **Approved Wrong Item**: 100% item refund + ₹49 delivery fee waiver |
-        | **4** | **Item Discrepancy** | Observed Dish = Billed Items | **Resolved Correct**: ₹0.00 Refund (Order delivered intact) |
-        """
-    )
