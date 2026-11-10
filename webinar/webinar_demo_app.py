@@ -611,56 +611,38 @@ tabs = st.tabs([
 ])
 
 # =============================================================================
-# Tab 1: PyTorch Data Pipeline with Augmentation & Batching
+# Tab 1: PyTorch Data Pipeline & Tensor Batching
 # =============================================================================
 with tabs[0]:
     st.subheader("Deep Learning Data Pipeline: Tensor Transformations & Batching")
     st.markdown(
-        "Demonstrating on-the-fly PyTorch preprocessing transformations, classical data augmentation, and mini-batch tensor assembly."
+        "Demonstrating on-the-fly PyTorch preprocessing transformations, channel-wise standardization, and mini-batch tensor assembly."
     )
 
-    t_col1, t_col2 = st.columns([1, 1])
-
     inference_transform = get_inference_transforms(image_size=224)
-    augmentation_transform = get_augmentation_transforms(image_size=224)
 
     # Standardize input for transforms
     clean_food_pil = ImageOps.exif_transpose(food_img).convert("RGB")
     food_tensor_inf = inference_transform(clean_food_pil)
-    food_tensor_aug = augmentation_transform(clean_food_pil)
+
+    t_col1, t_col2 = st.columns([1, 1])
 
     with t_col1:
-        st.markdown("**1. Raw Input vs. Standardized Inference Tensor**")
+        st.markdown("**Raw Ingested Image**")
         st.image(clean_food_pil, caption=f"Raw Ingestion: {clean_food_pil.size[0]}x{clean_food_pil.size[1]} ({clean_food_pil.mode})", width='stretch')
-        st.code(
-            f"PyTorch Inference Tensor:\n"
-            f"Shape       : {list(food_tensor_inf.shape)} [C, H, W]\n"
-            f"Dtype       : {food_tensor_inf.dtype}\n"
-            f"Value Range : [{food_tensor_inf.min():.3f}, {food_tensor_inf.max():.3f}]\n"
-            f"Mean / Std  : Norm(mean={IMAGENET_MEAN}, std={IMAGENET_STD})",
-            language="text",
-        )
 
     with t_col2:
-        st.markdown("**2. Classical Data Augmentation (On-the-Fly)**")
-        # Denormalize tensor to visualize
-        inv_aug = food_tensor_aug.clone()
-        for c in range(3):
-            inv_aug[c] = inv_aug[c] * IMAGENET_STD[c] + IMAGENET_MEAN[c]
-        inv_aug_np = np.clip(inv_aug.permute(1, 2, 0).numpy(), 0, 1)
-
-        st.image(inv_aug_np, caption="Augmented View: Random Crop (224x224) + Color Jitter + Affine Rotate + Flip", width='stretch')
+        st.markdown("**Standardized PyTorch Inference Tensor**")
         st.code(
-            "Transforms.Compose([\n"
-            "    Resize(256), RandomCrop(224),\n"
-            "    RandomHorizontalFlip(p=0.5),\n"
-            "    ColorJitter(brightness=0.15, contrast=0.15),\n"
-            "    RandomAffine(degrees=15, translate=(0.08, 0.08)),\n"
-            "    ToTensor(), Normalize(mean, std)\n"
-            "])\n"
-            "Purpose: Invariance to customer camera angle, lighting, and phone orientation.",
-            language="python",
+            f"PyTorch Inference Tensor:\n"
+            f"Shape       : {list(food_tensor_inf.shape)} [Channels, Height, Width]\n"
+            f"Dtype       : {food_tensor_inf.dtype}\n"
+            f"Value Range : [{food_tensor_inf.min():.3f}, {food_tensor_inf.max():.3f}]\n"
+            f"Mean / Std  : Norm(mean={IMAGENET_MEAN}, std={IMAGENET_STD})\n"
+            f"Pipeline    : Resize(256) -> CenterCrop(224) -> ToTensor() -> Normalize()",
+            language="text",
         )
+        st.info("Standardizes pixel arrays into zero-mean, unit-variance tensors ready for downstream model inference.")
 
     st.markdown("---")
     st.subheader("PyTorch DataLoader Mini-Batch Assembly")
