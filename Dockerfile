@@ -26,3 +26,4 @@ EXPOSE 8000 8501
 
 # Default startup: launches Streamlit interactive workbench
 CMD ["streamlit", "run", "webinar/webinar_demo_app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+

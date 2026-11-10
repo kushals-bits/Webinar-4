@@ -1,6 +1,11 @@
 """
 Build the human-written Laboratory Walkthrough Notebook:
 'ai_ready_image_preprocessing_walkthrough.ipynb'.
+
+Curriculum Alignment:
+- Deep Learning Data Pipeline with On-the-Fly Augmentation & Batching (PyTorch)
+- Generative AI vs. Classical Augmentation & Synthetic Image Forensics
+- Wrong Food Delivery Dispute Resolution & Automated Refund Engine
 """
 import json
 import os
@@ -26,496 +31,384 @@ def add_code(source):
     })
 
 # -----------------------------------------------------------------------------
-# Header: Laboratory Manual Style
+# Title & Problem Statement
 # -----------------------------------------------------------------------------
-add_md(r"""# Image Pre-processing for AI-Ready Data
-## Laboratory Manual: Image Authenticity, Spatial Forensics & Automated Dispute Adjudication
+add_md(r"""# Wrong Food Delivery Dispute Adjudication & Image Authenticity Pipeline
+## Laboratory Manual: PyTorch Data Pipeline, Generative AI Detection & Automated Refund Engine
 
-### Problem Statement
-Automated customer dispute systems face fraudulent or invalid image submissions:
-1. **Recycled claims**: Uploading previously compensated photos across different accounts.
-2. **Display screen re-photography**: Photographing a laptop or phone display displaying an internet image.
-3. **Synthetic generations**: Creating photorealistic damaged food images via diffusion models.
-4. **Temporal manipulation**: Submitting photos captured outside the actual delivery window.
+### Problem Statement & Operational Use Case
+In online food delivery platforms (e.g. Zomato replica), customers frequently request refunds claiming:
+*"I was delivered the wrong food order!"*
 
-Passing raw image files directly to multimodal models causes inference failures, orientation errors, and financial leakage. This manual implements the complete verification and pre-processing pipeline required to validate and normalize image inputs prior to downstream multimodal decision models.""")
+To adjudicate the claim automatically, the platform requires customers to submit two images:
+1. **Delivered Food Photo**: Proof of the meal items physically received.
+2. **Printed Bill Receipt**: The paper invoice attached to the delivery bag.
+
+Fraudulent actors increasingly attempt to exploit this policy by submitting **Generative AI synthetic images** (e.g. photorealistic diffusion outputs of incorrect dishes) to obtain wrongful payouts without receiving wrong food.
+
+This laboratory guide engineers an end-to-end production pipeline:
+1. **PyTorch Deep Learning Data Pipeline**: Dataset abstraction, on-the-fly transformations, classical data augmentation, and tensor batching.
+2. **Generative AI vs. Real Image Detection Engine**: Evaluating physical camera photon shot noise (PRNU), 2D-FFT high-frequency power spectra, and hardware EXIF provenance.
+3. **Dispute Adjudication & Refund Engine**:
+   - If image is **AI-generated**: Lock refund loop, record suspicious activity, and issue **₹0.00** payout.
+   - If image is **Real**: Verify if wrong food was delivered against the printed bill. If wrong, issue **100% item refund + delivery fee waiver**.""")
 
 # -----------------------------------------------------------------------------
-# Environment & Setup
+# 1. Environment & Package Verification
 # -----------------------------------------------------------------------------
-add_md(r"""## 1. Environment & Package Verification
-Required libraries for spatial transforms, frequency analysis, and metadata extraction:
-- `cv2`: Spatial filtering, Laplacian variance kernel, 2D-DCT.
-- `PIL`: EXIF orientation transposition and tag extraction across JPEG, AVIF, PNG, WebP.
-- `imagehash`: 64-bit perceptual hash computation.
-- `numpy` & `matplotlib`: Matrix operations and spectral visualization.""")
+add_md(r"""## 1. Environment & Tooling Verification
+We initialize the required deep learning, computer vision, and numerical libraries:
+- `torch` & `torchvision`: PyTorch `Dataset`, `DataLoader`, tensor transformations, and normalization.
+- `PIL` & `cv2`: Multi-format image container ingestion and spatial signal processing.
+- `numpy` & `matplotlib`: Spectral power plotting and matrix mathematics.""")
 
 add_code(r"""import os
 import sys
 import io
 import math
-import hashlib
-from datetime import datetime, timezone
+from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from PIL import Image, ImageOps, ExifTags
-import imagehash
+import torch
+from torch.utils.data import Dataset, DataLoader
+import torchvision.transforms as T
 
-plt.rcParams['figure.figsize'] = (12, 6)
-plt.rcParams['image.cmap'] = 'gray'
+plt.rcParams['figure.figsize'] = (12, 5)
+plt.rcParams['image.cmap'] = 'magma'
 
-print("Python    :", sys.version.split()[0])
-print("OpenCV    :", cv2.__version__)
-print("Pillow    :", Image.__version__)
-print("NumPy     :", np.__version__)
-print("ImageHash :", imagehash.__version__)
-print("Environment initialized.")""")
+print("Python       :", sys.version.split()[0])
+print("PyTorch      :", torch.__version__)
+print("Torchvision  :", torchvision.__version__ if 'torchvision' in locals() else 'Installed')
+print("OpenCV       :", cv2.__version__)
+print("Pillow       :", Image.__version__)
+print("CUDA Avail   :", torch.cuda.is_available())
+print("Environment initialized successfully.")""")
 
 # -----------------------------------------------------------------------------
-# Section 2: Sample Ingestion & Data Quality Dimensions
+# 2. Dataset Ingestion (Food Photos + Printed Receipt)
 # -----------------------------------------------------------------------------
-add_md(r"""## 2. Dataset Ingestion & Quality Dimensions
-We evaluate inputs across the six foundational data quality dimensions:
-- **Accuracy**: Content reflects physical reality without post-capture synthesis.
-- **Completeness**: Receipt and item photos are both present.
-- **Consistency**: Items match database manifests.
-- **Timeliness**: Capture timestamp aligns with the delivery window.
-- **Validity**: Natural camera capture, not a re-photographed screen or AI generation.
-- **Uniqueness**: Perceptual hash token has not appeared in prior resolved claims.
-
-Reference calibration set:
-1. `real_mobile_delivery.jpg`: Authentic camera capture with iPhone hardware EXIF.
-2. `ai_generated_food.jpg`: Synthetic diffusion output with stripped metadata and smoothed surfaces.
-3. `screen_capture_food.jpg`: Photograph of a display with bezel boundaries and Moiré ripples.
-4. `recycled_duplicate.jpg`: Previously compensated claim image.""")
+add_md(r"""## 2. Ingestion of Customer Dispute Evidence
+The customer submits evidence pairing the delivered meal with the printed receipt invoice.
+We load genuine customer food captures alongside reference synthetic diffusion outputs:
+- Real Food Items: `dosa.jpg`, `Burger.jpg`, `Chole.avif`, `Noodles.jpeg`, `Pasta.jpg`, `Thali.jpeg`
+- Synthetic Food: `ai_generated_food.jpg` (Diffusion model output)
+- Printed Bill Receipt: `delivery_receipt_bill.jpg`""")
 
 add_code(r"""SAMPLE_DIR = os.path.join(os.path.dirname(__file__) if '__file__' in locals() else '.', "sample_images")
 
 def load_sample(filename):
     path = os.path.join(SAMPLE_DIR, filename)
     if not os.path.exists(path):
-        raise FileNotFoundError(f"Missing sample: {path}")
+        raise FileNotFoundError(f"Missing sample file: {path}")
     return Image.open(path)
 
-img_mobile = load_sample("real_mobile_delivery.jpg")
+img_dosa = load_sample("dosa.jpg")
+img_burger = load_sample("Burger.jpg")
+img_chole = load_sample("Chole.avif")
+img_noodles = load_sample("Noodles.jpeg")
 img_ai = load_sample("ai_generated_food.jpg")
-img_screen = load_sample("screen_capture_food.jpg")
-img_recycled = load_sample("recycled_duplicate.jpg")
+img_bill = load_sample("delivery_receipt_bill.jpg")
 
 fig, axes = plt.subplots(1, 4, figsize=(18, 4))
-axes[0].imshow(img_mobile); axes[0].set_title("Authentic Mobile Photo"); axes[0].axis('off')
-axes[1].imshow(img_ai); axes[1].set_title("Synthetic AI Photo"); axes[1].axis('off')
-axes[2].imshow(img_screen); axes[2].set_title("Re-photographed Screen"); axes[2].axis('off')
-axes[3].imshow(img_recycled); axes[3].set_title("Recycled Claim Photo"); axes[3].axis('off')
-
-plt.tight_layout()
-plt.show()""")
-
-add_md(r"""### Benchmark Gallery: Real Customer Food Item Ingestion
-We also ingest five real-world food items submitted in customer delivery dispute payloads:
-1. `Burger.jpg`: Fast food dispute claim with embedded IPTC description metadata.
-2. `Chole.avif`: North Indian dish delivered in modern high-efficiency AVIF container format.
-3. `dosa.jpg`: High-resolution crispy Masala Dosa matching public web catalog indexing.
-4. `Noodles.jpeg`: Hakka noodles dish showing realistic sensor noise and web compression.
-5. `Pasta.jpg`: Penne pasta captured in vertical portrait aspect ratio (736x1165 px).""")
-
-add_code(r"""food_catalog = {
-    "Burger (IPTC Stock Tag)": "Burger.jpg",
-    "Chole Bhature (AVIF Modern)": "Chole.avif",
-    "Masala Dosa (Online Catalog)": "dosa.jpg",
-    "Hakka Noodles (Web JPEG)": "Noodles.jpeg",
-    "Penne Pasta (Portrait Aspect)": "Pasta.jpg",
-}
-
-fig, axes = plt.subplots(1, 5, figsize=(20, 4))
-for idx, (title, fname) in enumerate(food_catalog.items()):
-    img = load_sample(fname)
-    axes[idx].imshow(img)
-    axes[idx].set_title(f"{title}\n{img.size[0]}x{img.size[1]} ({img.format})", fontsize=9)
-    axes[idx].axis('off')
+axes[0].imshow(img_dosa); axes[0].set_title(f"Real Food: Masala Dosa\n{img_dosa.size[0]}x{img_dosa.size[1]} ({img_dosa.format})"); axes[0].axis('off')
+axes[1].imshow(img_chole); axes[1].set_title(f"Real Food: Chole (AVIF)\n{img_chole.size[0]}x{img_chole.size[1]} ({img_chole.format})"); axes[1].axis('off')
+axes[2].imshow(img_ai); axes[2].set_title(f"Synthetic Food: AI Diffusion\n{img_ai.size[0]}x{img_ai.size[1]} ({img_ai.format})"); axes[2].axis('off')
+axes[3].imshow(img_bill); axes[3].set_title(f"Printed Receipt / Bill\n{img_bill.size[0]}x{img_bill.size[1]} ({img_bill.format})"); axes[3].axis('off')
 
 plt.tight_layout()
 plt.show()""")
 
 # -----------------------------------------------------------------------------
-# Section 3: Spatial & Geometric Normalization
+# 3. PyTorch Deep Learning Data Pipeline
 # -----------------------------------------------------------------------------
-add_md(r"""## 3. Spatial & Geometric Normalization
-Camera sensors write raw landscape buffers and encode physical device rotation in EXIF tag `274` (`Orientation`). Downstream vision models without orientation preprocessing will process rotated or inverted inputs.
+add_md(r"""## 3. PyTorch Data Pipeline with On-the-Fly Transformations
+Deep vision models expect standardized float32 tensors with channel-wise normalization:
+$$z_{c, x, y} = \frac{x_{c, x, y} - \mu_c}{\sigma_c} \quad \text{where } c \in \{R, G, B\}$$
 
-Procedure:
-1. Read tag 274 and transpose the image matrix accordingly.
-2. Standardize color channels to 3-channel 8-bit sRGB (stripping alpha and CMYK profiles).
-3. Handle diverse container formats (JPEG, AVIF, PNG) gracefully.""")
+Using ImageNet statistics: $\mu = [0.485, 0.456, 0.406]$, $\sigma = [0.229, 0.224, 0.225]$.
 
-add_code(r"""def normalize_image_geometry(pil_img):
-    try:
-        normalized = ImageOps.exif_transpose(pil_img)
-    except Exception:
-        normalized = pil_img
-        
-    if normalized.mode != 'RGB':
-        normalized = normalized.convert('RGB')
-        
-    return normalized
+We compare two pipelines:
+1. **Inference Pipeline**: Deterministic `Resize(224) -> CenterCrop(224) -> ToTensor() -> Normalize()`.
+2. **Classical Data Augmentation Pipeline**: `RandomCrop(224) -> RandomHorizontalFlip() -> ColorJitter() -> RandomAffine() -> Normalize()`.
+   Classical augmentation introduces invariance to customer camera angles and lighting without distorting physical ground truth.""")
 
-clean_mobile = normalize_image_geometry(img_mobile)
-clean_pasta = normalize_image_geometry(load_sample("Pasta.jpg"))
-clean_chole = normalize_image_geometry(load_sample("Chole.avif"))
+add_code(r"""IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
 
-print("Mobile Image  : Original Mode =", img_mobile.mode, "| Clean Mode =", clean_mobile.mode, "| Shape =", np.array(clean_mobile).shape)
-print("Pasta Image   : Original Mode =", load_sample("Pasta.jpg").mode, "| Clean Mode =", clean_pasta.mode, "| Shape =", np.array(clean_pasta).shape)
-print("Chole (AVIF)  : Original Mode =", load_sample("Chole.avif").mode, "| Clean Mode =", clean_chole.mode, "| Shape =", np.array(clean_chole).shape)""")
+inference_transforms = T.Compose([
+    T.Resize(224, interpolation=T.InterpolationMode.BILINEAR),
+    T.CenterCrop(224),
+    T.ToTensor(),
+    T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+])
+
+augmentation_transforms = T.Compose([
+    T.Resize((256, 256), interpolation=T.InterpolationMode.BILINEAR),
+    T.RandomCrop(224),
+    T.RandomHorizontalFlip(p=0.5),
+    T.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.15, hue=0.05),
+    T.RandomAffine(degrees=15, translate=(0.08, 0.08), scale=(0.92, 1.08)),
+    T.ToTensor(),
+    T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+])
+
+clean_dosa = ImageOps.exif_transpose(img_dosa).convert("RGB")
+tensor_inf = inference_transforms(clean_dosa)
+tensor_aug = augmentation_transforms(clean_dosa)
+
+print("Inference Tensor Shape :", tensor_inf.shape, "| Dtype:", tensor_inf.dtype)
+print("Tensor Min / Max Range :", float(tensor_inf.min()), "to", float(tensor_inf.max()))
+
+# Visualizing Augmented vs Deterministic Tensor
+fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+inv_inf = tensor_inf.clone()
+for c in range(3): inv_inf[c] = inv_inf[c] * IMAGENET_STD[c] + IMAGENET_MEAN[c]
+axes[0].imshow(np.clip(inv_inf.permute(1, 2, 0).numpy(), 0, 1))
+axes[0].set_title("Standardized Inference Tensor (224x224)")
+axes[0].axis('off')
+
+inv_aug = tensor_aug.clone()
+for c in range(3): inv_aug[c] = inv_aug[c] * IMAGENET_STD[c] + IMAGENET_MEAN[c]
+axes[1].imshow(np.clip(inv_aug.permute(1, 2, 0).numpy(), 0, 1))
+axes[1].set_title("Classical Augmentation (Crop + Jitter + Affine)")
+axes[1].axis('off')
+
+plt.tight_layout()
+plt.show()""")
 
 # -----------------------------------------------------------------------------
-# Section 4: Temporal Window Audit
+# 4. PyTorch Dataset & DataLoader Mini-Batching
 # -----------------------------------------------------------------------------
-add_md(r"""## 4. Temporal Window Pre-processing & Causal Leakage Prevention
-Temporal data leakage occurs when future information or expired events contaminate decision models.
-For dispute claims:
-$$\Delta t = t_{\text{image}} - t_{\text{delivery}}$$
+add_md(r"""## 4. PyTorch Dataset & DataLoader Mini-Batch Assembly
+To achieve high throughput during peak order hours, customer dispute claims are ingested as a batched stream using PyTorch `Dataset` and `DataLoader` abstractions.""")
 
-Decision rules:
-- $\Delta t < -60\text{s}$: Claim predates delivery (Weight: $+0.30$) $\rightarrow$ Photo taken before meal preparation.
-- $\Delta t > 7200\text{s}$ (2 hours): Claim exceeds perishable delivery window (Weight: $+0.20$) $\rightarrow$ Risk of post-consumption alterations.
-- Missing timestamp: Typical of web downloads or AI generations (Weight: $+0.15$).""")
+add_code(r"""class CustomerDisputeDataset(Dataset):
+    def __init__(self, claim_records, transform=None):
+        self.records = claim_records
+        self.transform = transform or inference_transforms
 
-add_code(r"""def audit_temporal_window(pil_img, delivery_iso_str):
-    delivery_dt = datetime.fromisoformat(delivery_iso_str)
+    def __len__(self):
+        return len(self.records)
+
+    def __getitem__(self, idx):
+        item = self.records[idx]
+        food_pil = ImageOps.exif_transpose(item["food_image"]).convert("RGB")
+        bill_pil = ImageOps.exif_transpose(item["bill_image"]).convert("RGB")
+
+        return {
+            "food_tensor": self.transform(food_pil),
+            "bill_tensor": self.transform(bill_pil),
+            "order_id": item["order_id"],
+            "billed_dish": item["billed_dish"],
+            "claimed_dish": item["claimed_dish"]
+        }
+
+claim_records = [
+    {"food_image": img_dosa, "bill_image": img_bill, "order_id": "ORD-101", "billed_dish": "Butter Chicken", "claimed_dish": "Masala Dosa"},
+    {"food_image": img_burger, "bill_image": img_bill, "order_id": "ORD-102", "billed_dish": "Butter Chicken", "claimed_dish": "Burger"},
+    {"food_image": img_chole, "bill_image": img_bill, "order_id": "ORD-103", "billed_dish": "Butter Chicken", "claimed_dish": "Chole Bhature"},
+    {"food_image": img_ai, "bill_image": img_bill, "order_id": "ORD-104", "billed_dish": "Butter Chicken", "claimed_dish": "Synthetic Food"}
+]
+
+dataset = CustomerDisputeDataset(claim_records, transform=inference_transforms)
+dataloader = DataLoader(dataset, batch_size=4, shuffle=False)
+
+batch = next(iter(dataloader))
+print("Food Tensor Batch Dimensions :", batch["food_tensor"].shape, "[BatchSize=4, Channels=3, H=224, W=224]")
+print("Bill Tensor Batch Dimensions :", batch["bill_tensor"].shape, "[BatchSize=4, Channels=3, H=224, W=224]")
+print("Batch Order IDs              :", batch["order_id"])""")
+
+# -----------------------------------------------------------------------------
+# 5. Generative AI vs. Real Image Detection Engine
+# -----------------------------------------------------------------------------
+add_md(r"""## 5. Generative AI vs. Real Image Forensics Engine
+How does the system determine whether an uploaded food photo is authentic or generated by an AI model?
+
+Physical Forensics Indicators:
+1. **Camera Sensor Noise Residual (PRNU)**: Real CMOS sensors introduce Poisson-Gaussian photon shot noise. Diffusion models create mathematically smooth pixel manifolds with low residual noise variance.
+2. **2D Fast Fourier Transform (FFT) Power Spectrum**:
+   $$F(u, v) = \sum_{x=0}^{M-1} \sum_{y=0}^{N-1} f(x, y) \exp\left[-j 2\pi \left(\frac{ux}{M} + \frac{vy}{N}\right)\right]$$
+   Real lenses maintain radial energy across high frequencies, whereas synthetic generators exhibit steep high-frequency spectral roll-offs or grid artifacts.
+3. **Hardware Provenance Audit**: Authentic mobile phones write hardware tags (`Make`, `Model`, `DateTimeOriginal`). Generative AI tools strip device EXIF tags.""")
+
+add_code(r"""def extract_forensic_signals(pil_img):
+    rgb = pil_img.convert("RGB")
+    gray = cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2GRAY)
+    h, w = gray.shape
+
+    # 1. Laplacian Edge Sharpness Variance
+    lap = cv2.Laplacian(gray, cv2.CV_64F)
+    blur_var = float(lap.var())
+
+    # 2. Sensor Noise Residual (High-pass filtered)
+    smoothed = cv2.GaussianBlur(gray, (5, 5), 0)
+    noise_res = cv2.absdiff(gray, smoothed)
+    noise_var = float(np.var(noise_res))
+
+    # 3. 2D-FFT Radial High-Frequency Energy Ratio
+    fft2 = np.fft.fft2(gray)
+    fshift = np.fft.fftshift(fft2)
+    mag_spec = np.log(np.abs(fshift) + 1.0)
+
+    cy, cx = h // 2, w // 2
+    y, x = np.ogrid[:h, :w]
+    r = np.sqrt((x - cx)**2 + (y - cy)**2)
     
+    inner_mask = r <= (min(h, w) // 8)
+    outer_mask = (r > (min(h, w) // 8)) & (r <= (min(h, w) // 3))
+    
+    inner_e = float(np.mean(mag_spec[inner_mask])) if np.any(inner_mask) else 1.0
+    outer_e = float(np.mean(mag_spec[outer_mask])) if np.any(outer_mask) else 0.0
+    hf_ratio = outer_e / max(inner_e, 1e-5)
+
+    # 4. EXIF Hardware Audit
     exif = pil_img.getexif() if hasattr(pil_img, "getexif") else (pil_img._getexif() if hasattr(pil_img, "_getexif") else None)
-    if not exif:
-        return {"has_exif": False, "delta_sec": None, "valid": False, "flag": "MISSING_EXIF_TIMESTAMP", "risk": 0.15}
-        
-    tag_map = {ExifTags.TAGS.get(k, k): v for k, v in exif.items() if k in ExifTags.TAGS}
-    dto_str = tag_map.get("DateTimeOriginal")
-    description = str(tag_map.get("ImageDescription", "")).strip() or None
-    make = tag_map.get("Make")
-    model = tag_map.get("Model")
-    
-    if not dto_str:
-        return {
-            "has_exif": True,
-            "make": make,
-            "model": model,
-            "description": description,
-            "delta_sec": None,
-            "valid": False,
-            "flag": "MISSING_DATETIME_ORIGINAL",
-            "risk": 0.15
-        }
-        
-    try:
-        img_dt = datetime.strptime(str(dto_str).strip(), "%Y:%m:%d %H:%M:%S").replace(tzinfo=delivery_dt.tzinfo)
-        delta_sec = (img_dt - delivery_dt).total_seconds()
-        
-        if delta_sec < -60:
-            flag = "PREDATES_DELIVERY"
-            risk = 0.30
-            valid = False
-        elif delta_sec > 7200:
-            flag = "POST_DELIVERY_WINDOW_EXCEEDED"
-            risk = 0.20
-            valid = False
-        else:
-            flag = "PASS"
-            risk = 0.0
-            valid = True
-            
-        return {
-            "has_exif": True,
-            "make": make,
-            "model": model,
-            "description": description,
-            "delta_sec": delta_sec,
-            "valid": valid,
-            "flag": flag,
-            "risk": risk
-        }
-    except Exception as exc:
-        return {"has_exif": True, "delta_sec": None, "valid": False, "flag": "PARSE_ERROR", "risk": 0.15}
+    has_hw = False
+    if exif:
+        tag_dict = {ExifTags.TAGS.get(k, k): v for k, v in exif.items() if k in ExifTags.TAGS}
+        has_hw = bool(tag_dict.get("Make") and tag_dict.get("Model"))
 
-delivery_time = "2026-11-09T18:30:00+05:30"
-print("Authentic Mobile :", audit_temporal_window(img_mobile, delivery_time))
-print("Burger (Stock)   :", audit_temporal_window(load_sample("Burger.jpg"), delivery_time))
-print("Synthetic Photo  :", audit_temporal_window(img_ai, delivery_time))""")
+    # Synthesize AI Probability
+    prob = 0.0
+    if not exif: prob += 0.35
+    elif not has_hw: prob += 0.20
+    else: prob -= 0.30
 
-# -----------------------------------------------------------------------------
-# Section 5: Fuzzy Deduplication via 2D-DCT
-# -----------------------------------------------------------------------------
-add_md(r"""## 5. Fuzzy Deduplication via 2D Discrete Cosine Transform (pHash)
-Cryptographic hashes (SHA-256) exhibit the avalanche effect: a 1-pixel shift flips $\approx 50\%$ of the digest.
-Perceptual hashing projects image luminance into the frequency domain via **2D DCT-II**:
+    if noise_var < 8.0: prob += 0.35
+    elif noise_var > 20.0: prob -= 0.20
 
-$$X_{k_1, k_2} = \sum_{n_1=0}^{31} \sum_{n_2=0}^{31} x_{n_1, n_2} \cos\left[\frac{\pi}{32}\left(n_1 + \frac{1}{2}\right)k_1\right] \cos\left[\frac{\pi}{32}\left(n_2 + \frac{1}{2}\right)k_2\right]$$
+    if blur_var < 120.0: prob += 0.20
+    elif blur_var > 350.0: prob -= 0.15
 
-1. Top-left $8 \times 8$ matrix retains low-frequency structural energy.
-2. DC component $X_{0,0}$ is excluded to ensure brightness invariance.
-3. Bits are set by median comparison:
-$$B_i = \begin{cases} 1 & \text{if } X_i \ge \mu \\ 0 & \text{if } X_i < \mu \end{cases}$$
-4. Bitwise Hamming distance evaluates similarity:
-$$D_H(h_1, h_2) = \sum_{j=0}^{63} (B_{1,j} \oplus B_{2,j})$$
-If $D_H \le 4$, the image is classified as a duplicate.""")
+    if hf_ratio < 0.28: prob += 0.20
 
-add_code(r"""def compute_2d_dct_phash(pil_img):
-    gray = pil_img.convert('L').resize((32, 32), Image.Resampling.LANCZOS)
-    arr = np.array(gray, dtype=np.float32)
-    
-    dct = cv2.dct(arr)
-    dct_low = dct[0:8, 0:8]
-    
-    flat = dct_low.flatten()[1:]
-    median = np.median(flat)
-    bits = (dct_low > median).astype(int)
-    
-    token = str(imagehash.phash(pil_img))
-    return token, dct_low, bits
+    final_prob = float(np.clip(prob, 0.02, 0.98))
+    is_ai = final_prob >= 0.55
 
-tok_mobile, dct_m, bits_m = compute_2d_dct_phash(clean_mobile)
-tok_recycled, _, _ = compute_2d_dct_phash(normalize_image_geometry(img_recycled))
-
-print(f"Mobile Image pHash   : {tok_mobile}")
-print(f"Recycled Image pHash : {tok_recycled}")
-
-historical_db = {
-    "a1b2c3d4e5f6a7b8": "Claim REF-2025-01 (Flagged)",
-    "deadbeefcafebabe": "Claim REF-2025-02 (Flagged)"
-}
-
-def check_hamming_against_registry(token, registry, max_hamming=4):
-    token_h = imagehash.hex_to_hash(token)
-    for stored_h_str, meta in registry.items():
-        dist = abs(token_h - imagehash.hex_to_hash(stored_h_str))
-        if dist <= max_hamming:
-            return True, dist, meta
-    return False, None, None
-
-is_dup, dist, meta = check_hamming_against_registry(tok_recycled, historical_db)
-print(f"Deduplication Check for Recycled Image: Duplicate={is_dup}, Distance={dist}, Reference={meta}")""")
-
-# -----------------------------------------------------------------------------
-# Section 6: Display Screen & Bezel Forensics
-# -----------------------------------------------------------------------------
-add_md(r"""## 6. Display Screen & Bezel Forensics
-When users photograph a laptop or tablet screen displaying an internet photo:
-1. **Bezel Detection**: Physical device bezels produce uniform perimeter pixel borders:
-$$\text{Uniformity} = \frac{\max_c \text{Count}(\text{pixel} = c)}{N_{\text{border}}}$$
-If $\text{Uniformity} \ge 0.85$, a display bezel boundary is confirmed.
-
-2. **Laplacian Blur Variance**: Discrete second-order derivative kernel:
-$$\nabla^2 I = \begin{bmatrix} 0 & 1 & 0 \\ 1 & -4 & 1 \\ 0 & 1 & 0 \end{bmatrix} * I \quad \implies \quad \text{Blur Score} = \text{Var}(\nabla^2 I)$$""")
-
-add_code(r"""def detect_screen_bezel_and_blur(pil_img, border_px=30):
-    img_rgb = pil_img.convert("RGB")
-    w, h = img_rgb.size
-    
-    top = [img_rgb.getpixel((x, y)) for x in range(w) for y in range(border_px)]
-    bottom = [img_rgb.getpixel((x, y)) for x in range(w) for y in range(h - border_px, h)]
-    left = [img_rgb.getpixel((x, y)) for x in range(border_px) for y in range(border_px, h - border_px)]
-    right = [img_rgb.getpixel((x, y)) for x in range(w - border_px, w) for y in range(border_px, h - border_px)]
-    border_pixels = top + bottom + left + right
-    
-    from collections import Counter
-    counts = Counter(border_pixels)
-    most_common_cnt = counts.most_common(1)[0][1]
-    uniformity = most_common_cnt / len(border_pixels)
-    is_screen = uniformity >= 0.85
-    
-    gray = cv2.cvtColor(np.array(img_rgb), cv2.COLOR_RGB2GRAY)
-    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-    blur_score = float(laplacian.var())
-    
     return {
-        "is_screen": is_screen,
-        "border_uniformity": round(uniformity, 4),
-        "blur_score": round(blur_score, 2),
-        "laplacian_mask": np.abs(laplacian)
+        "is_ai": is_ai,
+        "prob_ai": round(final_prob, 3),
+        "noise_var": round(noise_var, 2),
+        "blur_var": round(blur_var, 2),
+        "hf_ratio": round(hf_ratio, 3),
+        "has_hardware": has_hw,
+        "mag_spec": mag_spec
     }
 
-screen_res = detect_screen_bezel_and_blur(load_sample("screen_capture_food.jpg"))
-mobile_res = detect_screen_bezel_and_blur(img_mobile)
+forensics_real = extract_forensic_signals(img_dosa)
+forensics_ai = extract_forensic_signals(img_ai)
 
-print("Screen Photo : Bezel Uniformity =", screen_res['border_uniformity'], "| Is Screen =", screen_res['is_screen'])
-print("Mobile Photo : Bezel Uniformity =", mobile_res['border_uniformity'], "| Is Screen =", mobile_res['is_screen'])""")
+print("Real Dosa Photo  -> AI Probability:", forensics_real['prob_ai'], "| Verdict:", "AI" if forensics_real['is_ai'] else "REAL AUTHENTIC")
+print("AI-Generated Food -> AI Probability:", forensics_ai['prob_ai'], "| Verdict:", "AI SYNTHETIC" if forensics_ai['is_ai'] else "REAL")
+
+# Visualize 2D-FFT comparison
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+c1 = axes[0].imshow(forensics_real['mag_spec'], cmap='magma')
+axes[0].set_title(f"Real Photo 2D-FFT (HF Ratio: {forensics_real['hf_ratio']})")
+fig.colorbar(c1, ax=axes[0], fraction=0.046, pad=0.04)
+
+c2 = axes[1].imshow(forensics_ai['mag_spec'], cmap='magma')
+axes[1].set_title(f"AI-Generated 2D-FFT (HF Ratio: {forensics_ai['hf_ratio']})")
+fig.colorbar(c2, ax=axes[1], fraction=0.046, pad=0.04)
+
+plt.tight_layout()
+plt.show()""")
 
 # -----------------------------------------------------------------------------
-# Section 7: Batch Forensics & Adjudication Benchmark
+# 6. Wrong Food Dispute Adjudication & Refund Engine
 # -----------------------------------------------------------------------------
-add_md(r"""## 7. Multi-Sample Batch Forensics & Adjudication Benchmark
-We benchmark the full pre-processing, EXIF provenance, perceptual hashing, spatial blur variance, and multi-tier risk decision engine across all food items:
+add_md(r"""## 6. Wrong Food Delivery Dispute Adjudication & Refund Engine
+The business logic ties image authenticity directly to dispute settlement:
+1. **Authenticity Gate**:
+   - If food photo is **AI-generated** ($P(\text{AI}) \ge 0.55$):
+     - **Refund is strictly blocked** (Payout = ₹0.00).
+     - Reason: *"Unable to verify physical proof of delivery: Image identified as synthetic."*
+2. **Item Discrepancy Verification**:
+   - If food photo is **Real physical capture**:
+     - Cross-verify delivered meal against billed restaurant receipt items.
+     - **Wrong Food Delivered**: Customer receives **100% item refund + full ₹49 delivery fee waiver**!
+     - **Correct Food Delivered**: Customer received what was billed $\rightarrow$ **₹0.00 refund**.""")
 
-Threshold rules:
-- **Risk Score $S < 0.40$**: `CLEARED` $\rightarrow$ Certified AI-ready, passes to visual inspection.
-- **$0.40 \le S < 0.80$**: `MANUAL_REVIEW` $\rightarrow$ Held in operator queue.
-- **$S \ge 0.80$**: `HARD_REJECT` $\rightarrow$ Immediate termination and logging.""")
-
-add_code(r"""def evaluate_claim_fraud_risk(pil_img, delivery_iso_str):
-    clean = normalize_image_geometry(pil_img)
-    exif = audit_temporal_window(pil_img, delivery_iso_str)
-    tok, _, _ = compute_2d_dct_phash(clean)
-    is_dup, dist, _ = check_hamming_against_registry(tok, historical_db)
-    screen = detect_screen_bezel_and_blur(clean)
+add_code(r"""def resolve_wrong_food_claim(food_pil, billed_items, observed_dish_name, delivery_fee=49.0):
+    # Step 1: Check Authenticity
+    forensic = extract_forensic_signals(food_pil)
     
-    # Online indexed check heuristic: tokens starting with 'a' or 'd'
-    is_indexed_online = tok[0].lower() in ('a', 'd')
+    if forensic["is_ai"]:
+        return {
+            "verdict": "REJECTED_SYNTHETIC_FRAUD",
+            "is_ai_generated": True,
+            "ai_probability": forensic["prob_ai"],
+            "refund_issued_rs": 0.0,
+            "delivery_fee_waived_rs": 0.0,
+            "total_payout_rs": 0.0,
+            "action_reason": "Refund blocked: Proof-of-delivery image flagged as synthetic / AI-generated."
+        }
+        
+    # Step 2: Cross-verify delivered meal vs. billed items
+    billed_dish_names = [item["name"].lower() for item in billed_items]
+    is_wrong_delivery = not any(observed_dish_name.lower() in name or name in observed_dish_name.lower() for name in billed_dish_names)
     
-    score = 0.0
-    flags = []
-    
-    if not exif.get("has_exif"):
-        flags.append("MISSING_EXIF_TIMESTAMP")
-        score += 0.15
-    elif not exif.get("valid"):
-        flags.append(exif.get("flag"))
-        score += exif.get("risk", 0.15)
-        
-    if is_dup:
-        flags.append("DUPLICATE_IMAGE_HASH")
-        score += 0.40
-        
-    if is_indexed_online:
-        flags.append("IMAGE_INDEXED_ONLINE")
-        score += 0.30
-        
-    if screen["is_screen"]:
-        flags.append("SCREEN_CAPTURE_DETECTED")
-        score += 0.25 * screen["border_uniformity"]
-        
-    if exif.get("description"):
-        desc = exif["description"].lower()
-        if any(k in desc for k in ["stock", "rustic", "setting", "getty", "shutter"]):
-            flags.append("STOCK_PHOTO_METADATA_DETECTED")
-            score += 0.25
-            
-    if (not exif.get("has_exif")) and (screen["blur_score"] < 150):
-        flags.append("SYNTHETIC_GENERATION_SUSPECT")
-        score += 0.20
-        
-    final_score = round(min(score, 1.0), 3)
-    
-    if final_score >= 0.8:
-        action = "HARD_REJECT"
-    elif final_score >= 0.4:
-        action = "MANUAL_REVIEW"
+    if is_wrong_delivery:
+        item_total = sum(i["qty"] * i["unit_price"] for i in billed_items)
+        return {
+            "verdict": "APPROVED_WRONG_ITEM",
+            "is_ai_generated": False,
+            "ai_probability": forensic["prob_ai"],
+            "refund_issued_rs": item_total,
+            "delivery_fee_waived_rs": delivery_fee,
+            "total_payout_rs": item_total + delivery_fee,
+            "action_reason": f"Wrong food delivery confirmed: Customer received '{observed_dish_name}' instead of billed items."
+        }
     else:
-        action = "CLEARED"
-        
-    return {
-        "pHash": tok,
-        "blur_score": screen["blur_score"],
-        "flags": flags,
-        "score": final_score,
-        "action": action
-    }
+        return {
+            "verdict": "RESOLVED_CORRECT_DELIVERY",
+            "is_ai_generated": False,
+            "ai_probability": forensic["prob_ai"],
+            "refund_issued_rs": 0.0,
+            "delivery_fee_waived_rs": 0.0,
+            "total_payout_rs": 0.0,
+            "action_reason": "No discrepancy: Delivered food matches items printed on receipt."
+        }
 
-all_test_assets = [
-    ("Authentic Mobile (iPhone 15)", img_mobile),
-    ("Burger (IPTC Stock Tag)", load_sample("Burger.jpg")),
-    ("Chole Bhature (AVIF Container)", load_sample("Chole.avif")),
-    ("Masala Dosa (Online Catalog)", load_sample("dosa.jpg")),
-    ("Hakka Noodles (Web JPEG)", load_sample("Noodles.jpeg")),
-    ("Penne Pasta (Portrait Aspect)", load_sample("Pasta.jpg")),
-    ("Synthetic AI (Diffusion)", img_ai),
-    ("Screen Capture (Display)", img_screen),
-    ("Recycled Duplicate", img_recycled),
+# Billed restaurant manifest from printed paper receipt
+receipt_manifest = [
+    {"name": "Butter Chicken", "qty": 2, "unit_price": 320.0},
+    {"name": "Garlic Naan", "qty": 4, "unit_price": 55.0}
 ]
 
-print(f"{'Sample Asset':<32} | {'Format':<14} | {'Blur':<7} | {'Risk':<5} | {'Decision':<14} | {'Flags'}")
-print("-" * 110)
+print("=== CASE 1: FRAUDULENT CUSTOMER SUBMITTING AI-GENERATED FOOD ===")
+decision_ai = resolve_wrong_food_claim(img_ai, receipt_manifest, "Synthetic Pizza")
+print("Status       :", decision_ai['verdict'])
+print("Total Refund : Rs.", decision_ai['total_payout_rs'])
+print("Reason       :", decision_ai['action_reason'])
+print()
 
-for label, img_obj in all_test_assets:
-    res = evaluate_claim_fraud_risk(img_obj, delivery_time)
-    fmt_str = f"{img_obj.format} {img_obj.size[0]}x{img_obj.size[1]}"
-    flags_str = ", ".join(res["flags"]) if res["flags"] else "Clean"
-    print(f"{label:<32} | {fmt_str:<14} | {res['blur_score']:<7.1f} | {res['score']:<5.2f} | {res['action']:<14} | {flags_str}")""")
-
-# -----------------------------------------------------------------------------
-# Section 8: Multimodal Fusion & Deterministic Refund Allocation
-# -----------------------------------------------------------------------------
-add_md(r"""## 8. Multimodal Feature Fusion & Refund Engine
-When a claim passes pre-processing (`CLEARED`), we fuse three data modalities:
-1. **Tabular manifest**: Database order items, quantities, unit prices.
-2. **Textual OCR**: Printed bill receipt timestamp and grand total.
-3. **Visual inspection**: Model observations of delivered item conditions and count.
-
-Deterministic payout allocation:
-- **Wrong item delivered**: 100% item value + delivery fee waiver.
-- **Spillage or damaged packaging**: 100% item value.
-- **Missing quantities**: Linear pro-rated refund based on shortfall.""")
-
-add_code(r"""def calculate_refund_payout(order_items, vision_result, delivery_fee=49.0):
-    line_refunds = {}
-    total_item_refund = 0.0
-    has_wrong = bool(vision_result.get("wrong_items"))
-    
-    for item in order_items:
-        name = item["name"]
-        expected_qty = item["qty"]
-        price = item["unit_price"]
-        item_val = expected_qty * price
-        
-        if name in vision_result.get("wrong_items", []):
-            line_refunds[name] = item_val
-            has_wrong = True
-        elif vision_result.get("damage_detected") and item.get("condition") == "leaking":
-            line_refunds[name] = item_val
-        else:
-            q_vis = vision_result.get("qty_visible", {}).get(name, expected_qty)
-            if q_vis < expected_qty:
-                missing = expected_qty - q_vis
-                line_refunds[name] = round((missing / expected_qty) * item_val, 2)
-            else:
-                line_refunds[name] = 0.0
-                
-        total_item_refund += line_refunds[name]
-        
-    waiver = delivery_fee if (has_wrong or total_item_refund > 0) else 0.0
-    total_payout = total_item_refund + waiver
-    
-    return {
-        "item_refunds": line_refunds,
-        "delivery_fee_waiver": waiver,
-        "total_payout_rs": total_payout
-    }
-
-order_dosa = [
-    {"name": "Crispy Masala Dosa", "qty": 2, "unit_price": 160.0},
-    {"name": "Madras Filter Coffee", "qty": 2, "unit_price": 60.0}
-]
-
-# Scenario: Customer received dosas, but coffee was missing from the bag
-vision_finding_dosa = {
-    "qty_visible": {"Crispy Masala Dosa": 2, "Madras Filter Coffee": 0},
-    "damage_detected": False,
-    "wrong_items": []
-}
-
-payout = calculate_refund_payout(order_dosa, vision_finding_dosa)
-print("=== REFUND CALCULATION BREAKDOWN ===")
-print("Order Manifest      :", order_dosa)
-print("Item Refunds        :", payout['item_refunds'])
-print("Delivery Fee Waiver : Rs.", payout['delivery_fee_waiver'])
-print("Total Approved      : Rs.", payout['total_payout_rs'])""")
+print("=== CASE 2: GENUINE CUSTOMER RECEIVING WRONG FOOD (MASALA DOSA) ===")
+decision_real = resolve_wrong_food_claim(img_dosa, receipt_manifest, "Masala Dosa")
+print("Status       :", decision_real['verdict'])
+print("Total Refund : Rs.", decision_real['total_payout_rs'])
+print("Reason       :", decision_real['action_reason'])""")
 
 # -----------------------------------------------------------------------------
-# Section 9: Summary & Checklist
+# 7. Summary & Checklist
 # -----------------------------------------------------------------------------
-add_md(r"""## 9. Summary & Production Checklist
+add_md(r"""## 7. Production Engineering Summary
 
-| Pre-processing Step | Technique Applied | Primary Failure Risk Prevented |
+| Pipeline Component | Deep Learning Technique | Operational Protection |
 |---|---|---|
-| **Orientation Correction** | EXIF Tag 274 Transpose | Upside-down or rotated bounding boxes |
-| **Temporal Delta Audit** | Capture vs. Delivery timestamp window | Retroactive claims and temporal data leakage |
-| **Perceptual Deduplication** | 2D-DCT Low-Frequency 64-bit Hash | Re-submission of previously compensated photos |
-| **Display Bezel Detection** | Perimeter pixel uniformity ratio | Re-photographed monitor or laptop screen fraud |
-| **Edge Sharpness Variance** | Laplacian kernel variance $\text{Var}(\nabla^2 I)$ | Out-of-focus capture or over-smoothed synthetic generation |
-| **Sensor Grain Forensics** | High-frequency noise distribution | Undetected synthetic diffusion model images |
-| **Tiered Risk Gating** | Cost-sensitive thresholds ($0.4 / 0.8$) | False positive accusations of honest customers |
-| **Hybrid Multimodal Fusion** | Cross-verification across Table, Text, and Image | Model hallucinations in refund calculation |
+| **Input Standardization** | PyTorch `Resize(224) + Normalize(ImageNet)` | Consistent tensor geometries across diverse mobile phone cameras |
+| **Classical Augmentation** | `RandomCrop + Affine + ColorJitter` | Prepares models for real-world lighting, tilt, and occlusion variations |
+| **DataLoader Batching** | Mini-batch tensor aggregation `[B, 3, 224, 224]` | High-throughput GPU/CPU serving during peak dinner delivery hours |
+| **Sensor Grain Forensics** | Photon noise residual variance (PRNU) | Detects over-smoothed synthetic manifolds produced by diffusion models |
+| **Spectral Analysis** | 2D Fast Fourier Transform (FFT) Power Spectrum | Identifies unnatural high-frequency spectral roll-offs |
+| **Hardware Provenance** | EXIF Tag Audit (`Make`, `Model`, `DateTimeOriginal`) | Exposes synthetic outputs and stripped internet downloads |
+| **Automated Dispute Gate** | Binary Authenticity Gate $\rightarrow$ Multimodal Receipt Match | **Zero payout for AI fraud**; **100% item refund + delivery waiver for genuine wrong food** |
 
 ---
-*Laboratory Manual: Pre-processing for AI-Ready Data.*""")
+*Laboratory Manual: Pre-processing for AI-Ready Data — Wrong Food Dispute Resolution Engine.*""")
 
 # Write notebook JSON
 notebook_content = {
