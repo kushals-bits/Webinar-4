@@ -40,6 +40,7 @@ from app.core.pytorch_pipeline import (
     get_augmentation_transforms,
     get_inference_transforms,
 )
+from app.database import mock_db
 
 # Page configuration
 st.set_page_config(
@@ -151,12 +152,51 @@ with st.sidebar:
             bill_title = "Default Receipt"
 
     st.markdown("---")
-    st.subheader("Order Context")
-    order_id = st.text_input("Order ID:", value="ORD-2026-904")
-    customer_id = st.text_input("Customer ID:", value="CUST-442")
+    st.subheader("Customer & Order Intelligence")
+    all_custs = mock_db.get_all_customers()
+    cust_options = {f"{c['customer_id']} — {c['customer_name']} ({c['trust_tier']})": c['customer_id'] for c in all_custs}
+    default_idx = 3 if len(all_custs) > 3 else 0
+    sel_label = st.selectbox("Customer Profile:", list(cust_options.keys()), index=default_idx)
+    sel_cid = cust_options[sel_label]
+    cust_profile = mock_db.get_customer(sel_cid)
+
+    customer_id = cust_profile["customer_id"]
+    customer_name = cust_profile["customer_name"]
+
+    # Active orders for this customer (FK relationship)
+    c_orders = mock_db.get_customer_orders(customer_id)
+    if c_orders:
+        order_opts = {f"{o['order_id']} | Bill: {o['bill_id']} ({o.get('order_date', '')[:10]})": o for o in c_orders}
+        sel_ord_label = st.selectbox("Active Order / Bill ID:", list(order_opts.keys()), index=0)
+        active_order = order_opts[sel_ord_label]
+        order_id = active_order["order_id"]
+        bill_id = active_order["bill_id"]
+        order_date = active_order["order_date"]
+        order_comment = active_order.get("comment", "")
+    else:
+        order_id = st.text_input("Order ID:", value="ORD-2026-904")
+        bill_id = st.text_input("Bill ID:", value="BILL-2026-9041")
+        order_date = "2026-11-09T18:00:00+05:30"
+        order_comment = "Dispute filed for wrong item delivered."
+
+    # Customer trust & dispute badge
+    score_col = "#3fb950" if cust_profile["trust_score"] > 0.8 else ("#d29922" if cust_profile["trust_score"] > 0.5 else "#f85149")
+    st.markdown(
+        f"""
+        <div style="background:#161b22; border:1px solid #30363d; border-radius:6px; padding:10px; margin-top:8px;">
+            <div style="font-size:12px; color:#8b949e;">Customer: <b style="color:#f0f6fc;">{customer_name}</b> ({customer_id})</div>
+            <div style="font-size:12px; color:#8b949e;">Bill ID: <b style="color:#58a6ff;">{bill_id}</b></div>
+            <div style="font-size:12px; color:#8b949e;">Order Date: <span>{order_date}</span></div>
+            <div style="font-size:12px; color:#8b949e;">Trust Score: <b style="color:{score_col};">{cust_profile['trust_score']:.0%}</b> ({cust_profile['trust_tier']})</div>
+            <div style="font-size:11px; color:#8b949e; margin-top:4px;"><i>"{cust_profile.get('comment', '')}"</i></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     customer_claim_text = st.text_area(
-        "Customer Claim:",
-        value="I ordered Butter Chicken and Garlic Naan, but the delivery bag contained something completely different! Please refund.",
+        "Customer Claim / Notes:",
+        value=order_comment or "I ordered Butter Chicken and Garlic Naan, but the delivery bag contained something completely different! Please refund.",
     )
 
 if food_img is None or bill_img is None:
@@ -364,6 +404,25 @@ with tabs[2]:
         st.markdown("#### 2. Customer Upload: Printed Paper Bill")
         st.image(bill_img, caption="Physical Printed Receipt / Bill", width='stretch')
         st.info("Restaurant: **Royal Tandoor Kitchen** | Billed Total: **₹1,129.00**")
+
+    st.markdown("---")
+    st.markdown("### Customer Profile & Cross-Referenced Database Record")
+    c_info1, c_info2, c_info3, c_info4 = st.columns(4)
+    with c_info1:
+        st.metric("Customer Name", customer_name)
+    with c_info2:
+        st.metric("Customer ID (FK)", customer_id)
+    with c_info3:
+        st.metric("Physical Bill ID", bill_id)
+    with c_info4:
+        st.metric("Trust Tier", cust_profile["trust_tier"])
+
+    with st.expander(f"Customer Order History ({len(cust_profile.get('order_history', []))} Recorded Invoices & Disputes)"):
+        hist_df = pd.DataFrame(cust_profile.get("order_history", []))
+        if not hist_df.empty:
+            st.dataframe(hist_df[["order_id", "bill_id", "order_date", "restaurant", "grand_total", "status", "dispute_filed", "dispute_status", "comment"]], use_container_width=True)
+        else:
+            st.caption("No prior order history on record.")
 
     st.markdown("---")
     st.markdown("### Order Manifest (From Printed Bill Receipt)")

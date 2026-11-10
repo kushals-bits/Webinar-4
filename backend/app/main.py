@@ -3,11 +3,15 @@ Zomato Replica Refund System — FastAPI Application Entry-Point
 
 Endpoints
 ---------
-POST  /api/v1/claims/submit         Submit a refund claim with bill & food images.
-GET   /api/v1/admin/queue           Retrieve the manual-review queue.
-GET   /api/v1/admin/suspicious-log  Retrieve the suspicious-activity log.
-GET   /api/v1/orders/{order_id}     Retrieve order details.
-GET   /health                       Service health-check.
+POST  /api/v1/claims/submit               Submit a refund claim with bill & food images.
+GET   /api/v1/customers                   Retrieve all customer profiles.
+GET   /api/v1/customers/{customer_id}     Retrieve a customer profile by Primary Key.
+GET   /api/v1/customers/{customer_id}/orders Retrieve orders associated with a customer.
+GET   /api/v1/bills/{bill_id}             Look up an order by printed bill ID.
+GET   /api/v1/admin/queue                 Retrieve the manual-review queue.
+GET   /api/v1/admin/suspicious-log        Retrieve the suspicious-activity log.
+GET   /api/v1/orders/{order_id}           Retrieve order details.
+GET   /health                             Service health-check.
 """
 
 from __future__ import annotations
@@ -154,6 +158,41 @@ class AdminQueueResponse(BaseModel):
 async def health_check() -> dict[str, str]:
     """Service liveness probe."""
     return {"status": "ok", "version": "1.0.0"}
+
+
+@app.get("/api/v1/customers", tags=["Customers"])
+async def get_customers() -> dict[str, Any]:
+    """Retrieve all customer profiles."""
+    customers = mock_db.get_all_customers()
+    return {"customers": customers, "total": len(customers)}
+
+
+@app.get("/api/v1/customers/{customer_id}", tags=["Customers"])
+async def get_customer(customer_id: str) -> dict[str, Any]:
+    """Retrieve a specific customer profile by Primary Key."""
+    cust = mock_db.get_customer(customer_id)
+    if cust is None:
+        raise HTTPException(status_code=404, detail=f"Customer '{customer_id}' not found.")
+    return cust
+
+
+@app.get("/api/v1/customers/{customer_id}/orders", tags=["Customers"])
+async def get_customer_orders(customer_id: str) -> dict[str, Any]:
+    """Retrieve all active orders associated with a customer (FK relationship)."""
+    cust = mock_db.get_customer(customer_id)
+    if cust is None:
+        raise HTTPException(status_code=404, detail=f"Customer '{customer_id}' not found.")
+    orders = mock_db.get_customer_orders(customer_id)
+    return {"customer_id": customer_id, "orders": orders, "total": len(orders)}
+
+
+@app.get("/api/v1/bills/{bill_id}", tags=["Bills"])
+async def get_bill_order(bill_id: str) -> dict[str, Any]:
+    """Look up an order by its unique physical bill/receipt ID."""
+    order = mock_db.get_order_by_bill_id(bill_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail=f"Bill '{bill_id}' not found.")
+    return {"bill_id": bill_id, "order": order}
 
 
 @app.get("/api/v1/orders/{order_id}", tags=["Orders"])
