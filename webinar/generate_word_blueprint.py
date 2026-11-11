@@ -1,16 +1,17 @@
 """
 Comprehensive generator for the complete, professional Word Document (.docx):
 'Complete Webinar Delivery Blueprint: From Zero Knowledge to Production AI Forensics'
-Fully covers all curriculum topics from basic to advanced:
-- 6 Data Quality Dimensions, Ingestion, Digital Image Representation
-- PyTorch Data Pipeline, Aspect-Preserving Standardization, DataLoader Batching, ImageNet Normalization
-- Temporal Windowing, Leakage Prevention, Display Screen Moiré & Bezel Forensics
-- 64-bit DCT Perceptual Hashing (pHash), Hamming Distance Matching
-- Generative AI vs Real Forensics: 2D FFT Diffraction, CMOS PRNU Shot Noise, VAE Lattice Peakiness, Studio Glaze
-- International C2PA / IPTC XMP Metadata Provenance, Container Spoofing
-- Multimodal Receipt Cross-Verification, Discrepancy Matching
-- Automated Policy Tree, Sybil Device Fingerprinting, Trust Score Ledger Mutation
-- 60-Minute Speaker Runbook & Interactive Student Checkpoint Questions
+Updated for a 90-Minute Masterclass with Exhaustive Basic Definitions & Explanations:
+- Comprehensive Beginner Glossary & Mathematical Definitions
+- 6 Data Quality Dimensions & Ingestion Protocols
+- Spatial Ingestion, PyTorch Tensor Pipelines, Aspect Standardization & ImageNet Normalization
+- Temporal Windowing, Retroactive Fraud, Screen Capture Bezel & Moiré Forensics
+- 64-bit DCT Perceptual Hashing (pHash) & Hamming Distance Matching
+- Generative AI Forensics: 2D FFT Optical Diffraction, CMOS PRNU Photon Noise, VAE Lattice Peakiness, Studio Glaze
+- International C2PA & IPTC XMP Metadata Provenance, Container Spoofing
+- Multimodal Receipt Cross-Verification & Discrepancy Matching
+- Automated Decision Policy Tree, Sybil Device Fingerprinting, Trust Score Ledger Mutation
+- 90-Minute Speaker Narration Runbook & Expanded Student Checkpoint Questions
 """
 
 from __future__ import annotations
@@ -91,6 +92,16 @@ def add_heading_2(doc, text: str, color_rgb=(43, 108, 176)):
     h.paragraph_format.space_after = Pt(3)
     return h
 
+def add_heading_3(doc, text: str, color_rgb=(13, 92, 117)):
+    h = doc.add_heading(level=3)
+    r = h.add_run(text)
+    r.font.size = Pt(11)
+    r.font.bold = True
+    r.font.color.rgb = RGBColor(*color_rgb)
+    h.paragraph_format.space_before = Pt(7)
+    h.paragraph_format.space_after = Pt(2)
+    return h
+
 def add_callout(doc, title: str, text: str, border_hex="2B6CB0", bg_hex="F7FAFC", title_rgb=(27, 54, 93)):
     tbl = doc.add_table(rows=1, cols=1)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -131,7 +142,7 @@ def build_full_blueprint_doc(output_path: str):
     # Document Cover / Header
     # -------------------------------------------------------------
     p_meta = doc.add_paragraph()
-    r_meta = p_meta.add_run("ENTERPRISE ENGINEERING FIELD GUIDE & MASTERCLASS PLAYBOOK")
+    r_meta = p_meta.add_run("ENTERPRISE ENGINEERING FIELD GUIDE & MASTERCLASS PLAYBOOK (90 MINUTES)")
     r_meta.font.size = Pt(9)
     r_meta.font.bold = True
     r_meta.font.color.rgb = RGBColor(43, 108, 176)
@@ -145,7 +156,7 @@ def build_full_blueprint_doc(output_path: str):
     p_title.paragraph_format.space_after = Pt(4)
 
     p_sub = doc.add_paragraph()
-    r_sub = p_sub.add_run("Comprehensive Curriculum: Data Quality, PyTorch Ingestion, 2D FFT Diffraction, CMOS PRNU Physics, C2PA Provenance & Multimodal Adjudication")
+    r_sub = p_sub.add_run("A 90-Minute Pedagogical Masterclass: Comprehensive Foundational Definitions, PyTorch Ingestion, 2D FFT Diffraction Physics, CMOS PRNU Shot Noise, C2PA Provenance & Multimodal Adjudication")
     r_sub.font.size = Pt(11)
     r_sub.font.italic = True
     r_sub.font.color.rgb = RGBColor(113, 128, 150)
@@ -155,10 +166,10 @@ def build_full_blueprint_doc(output_path: str):
     meta_table = doc.add_table(rows=2, cols=3)
     meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     meta_data = [
-        [("Audience Target", "Undergraduate & Graduate Students (Zero Prior AI Knowledge)"),
-         ("Curriculum Scope", "Basic (Foundations) ➔ Intermediate (Pipelines) ➔ Advanced (Forensics)"),
-         ("Live System", "Streamlit Forensics Workbench (port 8501)")],
-        [("Core Stack", "PyTorch, OpenCV, NumPy, Matplotlib, C2PA XMP, pHash"),
+        [("Audience Target", "Undergraduate & Graduate Students (Zero Prior AI Exposure)"),
+         ("Lecture Duration", "90 Minutes (Comprehensive 4-Part Structure)"),
+         ("Live System", "Streamlit Forensics Workbench (http://localhost:8501)")],
+        [("Core Stack", "PyTorch, OpenCV, NumPy, Matplotlib, C2PA XMP, 64-bit pHash"),
          ("Verification", "56 Automated Unit & Forensic Tests (100% Pass)"),
          ("GitHub Repo", "https://github.com/kushals-bits/Webinar-4.git")]
     ]
@@ -180,53 +191,171 @@ def build_full_blueprint_doc(output_path: str):
     doc.add_paragraph().paragraph_format.space_after = Pt(8)
 
     # -------------------------------------------------------------
-    # 1. Executive Summary & Curriculum Hierarchy
+    # 1. Executive Summary & 90-Minute Masterclass Architecture
     # -------------------------------------------------------------
-    add_heading_1(doc, "1. Executive Summary & Curriculum Architecture")
+    add_heading_1(doc, "1. Executive Summary & 90-Minute Masterclass Architecture")
     p = doc.add_paragraph()
     p.add_run(
-        "This field guide provides an exhaustive, end-to-end pedagogical blueprint designed to take students with zero knowledge of computer vision "
-        "and guide them through the mathematical, statistical, and operational foundations of modern AI dispute adjudication. "
-        "The curriculum is centered around an authentic, high-stakes industrial use case: automated wrong food delivery refund claims in food delivery platforms (e.g. Zomato replica).\n\n"
-        "The delivery is divided into three rigorous pedagogical tiers:"
-    )
-
-    p_tiers = doc.add_paragraph()
-    p_tiers.add_run(
-        "1. Level 1: Basic (Foundations & Intuition) — The business dilemma, 6 Data Quality Dimensions, digital image representation, RGB light channels, and cryptographic vs. perceptual hashing.\n"
-        "2. Level 2: Intermediate (Engineering Pipelines & Deduplication) — EXIF auto-transposition, temporal windowing, PyTorch dataset & dataloader mini-batching, aspect-preserving standardization, ImageNet normalization, screen capture bezel/Moiré detection, and 64-bit DCT pHash.\n"
-        "3. Level 3: Advanced (Synthetic AI Forensics & Decision Policy) — 2D Fast Fourier Transform optical diffraction, CMOS sensor photon shot noise (PRNU), latent diffusion VAE lattice harmonics, international C2PA/IPTC XMP metadata provenance, container spoofing, and multimodal discrepancy adjudication."
+        "This masterclass blueprint is engineered specifically for students who have no prior exposure to computer vision, machine learning, or signal processing. "
+        "Over a complete 90-minute session, the curriculum builds an intuitive, progressive bridge from the ground up: "
+        "beginning with elementary concepts (what a pixel is, how colors are mixed, and why computers see numbers instead of objects), "
+        "moving to production data engineering pipelines (tensors, spatial standardization, and deduplication), "
+        "and culminating in state-of-the-art synthetic AI detection based on physical optics, sensor noise, and international cryptographic metadata standards.\n\n"
+        "The curriculum is anchored in a high-stakes, real-world case study: automated wrong food delivery refund claims in food delivery applications (e.g. Zomato replica)."
     )
 
     add_callout(
         doc,
-        "⏱️ Recommended 60-Minute Masterclass Timeline:",
-        "• 00 – 15 Min: Level 1 (Basic) — The ₹100 Crore Problem, 6 Quality Dimensions, Digital Images, and Hashing.\n"
-        "• 15 – 35 Min: Level 2 (Intermediate) — PyTorch Ingestion, Tensors, Screen Forensics, and Receipt Cross-Matching.\n"
-        "• 35 – 55 Min: Level 3 (Advanced) — Catching GenAI: 2D FFT, CMOS PRNU Grain, VAE Peakiness, C2PA Provenance & Policy Trees.\n"
-        "• 55 – 60 Min: Wrap-Up & Live Interactive Q&A — Real-World Deployment, Sybil Attack Resistance & Career Q&A.",
+        "⏱️ Complete 90-Minute Masterclass Schedule:",
+        "• Part 1: Minutes 00 – 25 (25 Mins) — Level 1: Foundations, Elementary Glossary & The Business Problem.\n"
+        "    The ₹100 Crore refund loophole, basic definitions (Pixel, RGB, Bit Depth, Tensor, Hash), and the 6 Data Quality Dimensions.\n"
+        "• Part 2: Minutes 25 – 55 (30 Mins) — Level 2: Engineering Pipelines, Tensors & Deduplication.\n"
+        "    EXIF orientation Tag 274, temporal windowing, PyTorch standardization, ImageNet normalization, screen capture bezel/Moiré detection, and 64-bit DCT pHash.\n"
+        "• Part 3: Minutes 55 – 80 (25 Mins) — Level 3: Deep AI Forensics, Signal Physics & Decision Governance.\n"
+        "    2D FFT optical diffraction, CMOS sensor photon shot noise (PRNU), VAE lattice peakiness, C2PA/IPTC XMP provenance, and multimodal receipt matching.\n"
+        "• Part 4: Minutes 80 – 90 (10 Mins) — Live Demonstrator Runbook & Student Q&A.\n"
+        "    Hands-on execution on the live workbench (http://localhost:8501), student checkpoint quiz, and interactive debrief.",
         border_hex="2B6CB0", bg_hex="EDF2F7", title_rgb=(27, 54, 93)
     )
 
     # -------------------------------------------------------------
-    # 2. Level 1: Basic — Foundations, Image Representation & Business Context
+    # 2. Comprehensive Beginner Technical Glossary & Fundamental Definitions
     # -------------------------------------------------------------
-    add_heading_1(doc, "2. Level 1: Basic — Foundations & Intuition (15 Mins)", color_rgb=(40, 116, 50))
-
-    add_heading_2(doc, "Pointer 1.1: The Industrial Problem — The ₹100 Crore Refund Loophole")
+    add_heading_1(doc, "2. Comprehensive Beginner Glossary: Core Definitions & Intuitive Explanations", color_rgb=(13, 92, 117))
     p = doc.add_paragraph()
     p.add_run(
-        "Online food delivery platforms process millions of orders daily. A core operational feature is instant customer service: if a customer receives the wrong meal, a cold item, or a spilled container, "
-        "they upload photographic evidence to receive immediate reimbursement. However, automated refund endpoints present a massive target for fraud syndicates and dishonest customers:\n"
-        "• The Exploit: Bad actors upload photos of spilled food scraped from Google Images, recycled images from past orders, or generate synthetic meal photos using AI.\n"
-        "• The Asymmetric Cost Trade-Off: Human agent review creates a 48-hour SLA that destroys customer goodwill, while blind automated payouts bankrupt the platform.\n"
-        "• The Engineering Mandate: Build an automated, real-time vision adjudicator capable of verifying authenticity and line-item discrepancies in under 500 milliseconds."
+        "Before presenting code or architecture, every foundational concept must be clearly defined with real-world analogies and mathematical intuition. "
+        "Use this glossary to anchor students who have zero prior knowledge:"
+    )
+
+    glossary = [
+        ("Pixel (Picture Element)",
+         "The smallest indivisible addressable unit of a digital display or image sensor grid.",
+         "Think of a pixel as a single tiny colored stone in a giant mosaic. If you look from far away, you see a picture of a pizza; if you look through a magnifying glass, you only see a single square dot of uniform color.",
+         "An integer coordinate (x, y) holding color intensity values: Pixel at (x, y) = [Red, Green, Blue]."),
+
+        ("Bit Depth & Intensity Range [0, 255]",
+         "The amount of computer memory (in bits) allocated to store the brightness of each color channel for a single pixel.",
+         "Standard digital images allocate 8 bits (1 byte) of binary storage per color channel. In binary math, 8 bits can represent 2^8 = 256 unique numbers, ranging from 0 (complete darkness / black) to 255 (maximum possible brightness).",
+         "Color Intensity: 0 = minimum photon emission (black); 255 = maximum saturation."),
+
+        ("RGB Color Model (Additive Color)",
+         "An additive color system in which Red, Green, and Blue light wavelengths are mixed in various proportions to produce over 16.7 million distinct colors.",
+         "Stage lighting in a theater: if you shine a red flashlight, green flashlight, and blue flashlight all at the exact same spot on a dark stage, the spot turns pure white. If you turn all flashlights off, it is pure black.",
+         "[255, 0, 0] = Red | [0, 255, 0] = Green | [0, 0, 255] = Blue | [255, 255, 255] = White | [0, 0, 0] = Black. Total possible colors = 256 × 256 × 256 = 16,777,216 (24-bit TrueColor)."),
+
+        ("Scalar vs. Vector vs. Matrix vs. Tensor",
+         "A mathematical hierarchy defining arrays of numbers by their number of spatial and semantic dimensions (rank).",
+         "• Scalar (Rank 0): A single number (e.g., meal price = ₹160.00).\n• Vector (Rank 1): A 1D list of numbers (e.g., [R, G, B] values for a single pixel).\n• Matrix (Rank 2): A 2D grid of numbers (e.g., a grayscale image with Height × Width).\n• 3D Tensor (Rank 3): A single color image with [3 Channels × Height × Width].\n• 4D Tensor (Rank 4): A batch of multiple color images: [Batch_Size, 3 Channels, Height, Width] processed together by a neural network.",
+         "Tensors provide the universal mathematical language of all deep learning vision frameworks (such as PyTorch)."),
+
+        ("Data Pre-Processing",
+         "The automated engineering process of cleaning, transforming, and standardizing raw, messy real-world inputs into clean, uniform numerical data ready for machine learning models.",
+         "Cooking dinner: You never throw raw, unpeeled, unwashed potatoes directly into a hot oven. You wash off the dirt (cleaning), peel the skin (stripping metadata), chop them into equal slices (resizing and cropping), and measure the seasonings (normalization).",
+         "Without pre-processing, real-world data heterogeneity causes immediate model crashes or silent algorithmic degradation ('Garbage In, Garbage Out')."),
+
+        ("Z-Score Normalization (Standardization)",
+         "A statistical technique that rescales numerical data so that the resulting distribution has a mean (μ) of 0 and a standard deviation (σ) of 1.",
+         "Grading on a curve: If an exam was exceptionally difficult and the class average was 35%, scaling students relative to the average allows a fair comparison regardless of test difficulty.",
+         "Formula: z = (x - μ) / σ. In computer vision, standard ImageNet parameters are applied: μ = [0.485, 0.456, 0.406], σ = [0.229, 0.224, 0.225]. Normalizing prevents neural network gradients from exploding during backpropagation."),
+
+        ("EXIF Metadata (Exchangeable Image File Format)",
+         "Standardized metadata headers automatically written into image files (JPEG, HEIC, TIFF) by digital cameras and smartphones at the instant of photo capture.",
+         "The digital passport of a photo: recording the camera make (e.g. Apple), model (iPhone 15 Pro), lens focal length, aperture, GPS coordinates, capture date/time (DateTimeOriginal), and gyroscope tilt (Tag 274 Orientation).",
+         "Genuine smartphone photos carry rich hardware provenance tags. Web-downloaded images and generative AI tools strip or replace these headers."),
+
+        ("Cryptographic Hash (MD5 / SHA-256)",
+         "A mathematical one-way function that maps an arbitrary block of binary data to a fixed-length hexadecimal string, engineered so that even a single-bit alteration produces a totally different hash (Avalanche Effect).",
+         "A wax seal on a royal letter: if even one word inside the letter is altered or a corner is torn, the seal is broken.",
+         "Excellent for cybersecurity, but terrible for image deduplication because social media compression modifies file bytes without altering visual content."),
+
+        ("Perceptual Hash (pHash)",
+         "A visual fingerprinting algorithm that computes a compact hash based on the low-frequency visual structure (silhouette and luminance gradients) of an image.",
+         "Recognizing a close friend wearing sunglasses or a winter coat: even though their clothing or lighting changed, their facial bone structure remains instantly recognizable.",
+         "Uses the 2D Discrete Cosine Transform (DCT) to generate a 64-bit hash. Images that look visually identical produce near-identical hashes (Hamming Distance ≤ 4) despite heavy compression or resizing."),
+
+        ("Spatial Domain vs. Frequency Domain",
+         "Two distinct mathematical ways of representing the same visual data:\n• Spatial Domain: Pixels mapped by physical (x, y) coordinates on the screen (where features are located).\n• Frequency Domain: Pixels decomposed into how rapidly brightness changes across space (how fast colors fluctuate).",
+         "Musical sheet vs. audio sound waves: The spatial domain is like reading notes on sheet music; the frequency domain is like seeing the audio equalizer bars bouncing on a stereo display (bass vs. treble).",
+         "Smooth food textures and flat tables are low frequencies; sharp knife edges, hair, and lens diffraction are high frequencies."),
+
+        ("2D Fast Fourier Transform (FFT)",
+         "An algorithm that computes the 2-dimensional Discrete Fourier Transform, decomposing an image into an orthogonal basis of complex sinusoidal wave patterns.",
+         "Deconstructing a finished smoothie back into its individual ingredient cups (identifying how much strawberry, banana, and milk went into the blend).",
+         "Equation: F(u, v) = ∬ f(x, y) e^(-j 2π (ux + vy)) dx dy. Allows engineers to inspect whether an image possesses natural optical glass high frequencies or artificial synthetic smoothing."),
+
+        ("Optical Lens Diffraction",
+         "The physical wave bending of light rays as they pass through the mechanical aperture blades and curved glass elements of an optical camera lens.",
+         "Water waves passing through a narrow harbor entrance: the waves spread out in concentric rings on the other side.",
+         "Real camera lenses sustain continuous high-frequency diffraction energy all the way to the sensor's Nyquist limit (r ≥ 0.55). Generative AI diffusion models mathematically fail to replicate this physical diffraction."),
+
+        ("CMOS Sensor Photon Shot Noise (PRNU)",
+         "Photo-Response Non-Uniformity: Microscopic quantum fluctuations in photon arrivals (Poisson noise) and silicon pixel manufacturing variations inherent to all physical CMOS camera sensors.",
+         "The unique grain of sandpaper or film stock: no two camera sensors produce 100% perfectly identical electrical signals even under uniform lighting.",
+         "Real photos have measurable residual noise variance (Var > 1.0, often > 20.0). Diffusion models produce mathematically smooth manifolds with near-zero noise variance (Var < 0.10)."),
+
+        ("Latent Diffusion Model (Generative AI)",
+         "A modern generative deep learning architecture that generates images by learning to iteratively remove noise from a low-dimensional latent space representation conditioned on text prompts.",
+         "A sculptor starting with a rough block of marble (random Gaussian noise) and gradually chiseling away tiny stone chips step-by-step until a recognizable sculpture of a pasta dish appears.",
+         "Popular models: Stable Diffusion, Midjourney, Meta AI / Imagine, DALL-E. Because they denoise in a compressed latent space (e.g. 64 × 64), their upsampling decoders leak periodic checkerboard lattice harmonics."),
+
+        ("C2PA / IPTC Standard Metadata",
+         "Coalition for Content Provenance and Authenticity: An international cryptographic metadata standard that cryptographically signs digital media to prove provenance and indicate whether media was synthesized by AI.",
+         "A tamper-proof digital watermark and certificate of authenticity stamped directly into the image's XMP metadata packet.",
+         'Tags like iptcExt:DigitalSourceType="http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia" prove synthetic origin with 99.0% certainty.'),
+
+        ("Multimodal AI",
+         "An AI architecture capable of understanding, combining, and cross-referencing multiple diverse data types (modalities) simultaneously—such as visual images, OCR text, and tabular database records.",
+         "A human restaurant manager looking at a plate of food on a table while simultaneously reading the paper printed receipt and checking the customer's loyalty account on a tablet.",
+         "Discrepancy Formula: is_wrong_item = (observed_dish not in billed_manifest)."),
+
+        ("Asymmetric Cost Function & Gating",
+         "A decision-making strategy where the financial and operational penalty of making one type of error is vastly different from the penalty of making another type of error.",
+         "A smoke detector: It is mildly annoying if a smoke alarm beeps when you burn toast (False Positive), but catastrophic if it fails to sound during a real house fire (False Negative).",
+         "In refund fraud: Accusing an honest high-value customer of fraud (False Positive) destroys lifetime loyalty, while paying a ₹150 fraudulent claim (False Negative) is a minor loss. Multi-tiered gating balances these costs.")
+    ]
+
+    for term, defn, analogy, math in glossary:
+        add_heading_2(doc, term)
+        p = doc.add_paragraph()
+        r1 = p.add_run("• Formal Definition: ")
+        r1.bold = True
+        r1.font.color.rgb = RGBColor(27, 54, 93)
+        p.add_run(defn + "\n")
+
+        r2 = p.add_run("• Intuitive Beginner Analogy: ")
+        r2.bold = True
+        r2.font.color.rgb = RGBColor(40, 116, 50)
+        p.add_run(analogy + "\n")
+
+        r3 = p.add_run("• Mathematical / Technical Formula: ")
+        r3.bold = True
+        r3.font.color.rgb = RGBColor(197, 48, 48)
+        p.add_run(math)
+
+    doc.add_paragraph().paragraph_format.space_after = Pt(8)
+
+    # -------------------------------------------------------------
+    # 3. Part 1: Beginner Foundations & The Business Dilemma (25 Mins)
+    # -------------------------------------------------------------
+    add_heading_1(doc, "3. Part 1: Level 1 — Beginner Foundations & The Business Dilemma (25 Mins)", color_rgb=(40, 116, 50))
+
+    add_heading_2(doc, "Pointer 1.1: The Industrial Context — The ₹100 Crore Refund Loophole")
+    p = doc.add_paragraph()
+    p.add_run(
+        "Online food delivery platforms process millions of meals daily. Instant automated customer dispute resolution is vital for customer retention: "
+        "if a delivery rider brings a cold burger instead of a hot biryani, the customer expects an immediate refund. "
+        "However, automated refund APIs represent an immense attack surface for fraud syndicates:\n"
+        "• The Attack Vector: Fraudulent rings submit recycled photos from past orders, download images of spilled food from social media, or generate hyper-realistic fake photos using generative AI.\n"
+        "• Operational Friction: Assigning human customer support agents to review every photo creates a 48-hour backlog, ballooning payroll and infuriating genuine customers.\n"
+        "• Blind Automation Failure: Blindly auto-refunding every claim creates massive financial leakage, draining platform margins.\n"
+        "• The Engineering Mandate: Build an automated, real-time computer vision adjudicator capable of verifying physical authenticity and line-item discrepancies in under 500 milliseconds."
     )
 
     add_callout(
         doc,
-        "🎙️ Word-for-Word Speaker Script (The Opening Hook):",
-        '"Imagine you order a Deluxe Maharaja Thali on your favorite food app. When the delivery rider arrives, you open the package and find a plain burger. '
+        "🎙️ Word-for-Word Presenter Script (The Opening Hook):",
+        '"Imagine you order a Deluxe Maharaja Thali on your favorite app. When the rider arrives, you open the package and find a plain burger. '
         'You click Request Refund, upload a picture of the burger, and within 30 seconds your bank account is credited with ₹350. Great customer service, right?\n\n'
         'Now imagine 50,000 college students discover that if they prompt Meta AI or Midjourney for a picture of spilled curry on a kitchen floor, '
         'they can eat free lunch every single day. Food delivery companies lose tens of millions every year to automated refund fraud.\n\n'
@@ -239,7 +368,7 @@ def build_full_blueprint_doc(output_path: str):
     p = doc.add_paragraph()
     p.add_run(
         "Before feeding unstructured data into neural vision models, production systems audit the six fundamental data quality dimensions:\n"
-        "1. Accuracy: Does the image depict the true physical entity delivered, rather than a synthetic hallucination or a stock photo?\n"
+        "1. Accuracy: Does the image depict the true physical meal delivered, rather than a synthetic hallucination or a stock photo?\n"
         "2. Completeness: Are all required evidence modalities present (delivered dish photo + printed restaurant bill invoice)?\n"
         "3. Consistency: Is the image formatted as a canonical 3-channel RGB canvas, and do metadata timestamps align across time zones?\n"
         "4. Timeliness: Was the photograph captured within the delivery claim window (preventing claims submitted 3 weeks after delivery)?\n"
@@ -247,58 +376,10 @@ def build_full_blueprint_doc(output_path: str):
         "6. Uniqueness: Is the image novel, or is it a recycled duplicate of an existing claim in the fraud registry?"
     )
 
-    add_heading_2(doc, "Pointer 1.3: What is a Digital Image to a Machine?")
-    p = doc.add_paragraph()
-    p.add_run(
-        "Students often conceptualize computer vision as an optical eye looking through a camera lens. Demystify this immediately: computers have no eyes, only numerical tensors.\n"
-        "• The Discrete Canvas: An image is a 3-dimensional matrix: Shape = [Height (H) × Width (W) × Channels (C)].\n"
-        "• Primary Light Channels (RGB): Every color pixel is composed of 3 integer values ranging from 0 (completely dark) to 255 (maximum photon intensity):\n"
-        "    - Pure Red: [255, 0, 0] | Pure Green: [0, 255, 0] | Pure Blue: [0, 0, 255]\n"
-        "    - White: [255, 255, 255] | Black: [0, 0, 0]\n"
-        "• Data Volume at Scale: A standard 12-megapixel smartphone photo (4032 × 3024 pixels) contains 12,192,768 pixels, each with 3 numbers—totaling 36,578,304 discrete integer values.\n"
-        "• The Perceptual Paradox: If you modify a single pixel value from 255 to 254, human eyes perceive zero change. But mathematically, a computer calculates the difference instantly."
-    )
-
-    add_heading_2(doc, "Pointer 1.4: Cryptographic Hashing (MD5/SHA) vs. Perceptual Hashing (pHash)")
-    p = doc.add_paragraph()
-    p.add_run(
-        "A common beginner question: 'Why can't we just compute an MD5 or SHA-256 hash to check if a photo was already uploaded?'"
-    )
-
-    hash_tbl = doc.add_table(rows=4, cols=3)
-    hash_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-    h_headers = ["Attribute", "Cryptographic Hashing (MD5 / SHA-256)", "Perceptual Hashing (64-bit DCT pHash)"]
-    for idx, text in enumerate(h_headers):
-        cell = hash_tbl.cell(0, idx)
-        set_cell_background(cell, "1B365D")
-        set_cell_margins(cell, top=80, bottom=80, left=100, right=100)
-        p = cell.paragraphs[0]
-        r = p.add_run(text)
-        r.bold = True
-        r.font.size = Pt(8.5)
-        r.font.color.rgb = RGBColor(255, 255, 255)
-
-    h_rows = [
-        ("Design Principle", "Security & Integrity: Any 1-bit change produces an entirely distinct hash (Avalanche Effect).", "Visual Equivalence: Generates matching fingerprints for images that look visually similar."),
-        ("WhatsApp Compression", "❌ Hash changes completely (100% false negative on recycled photos).", "✅ Preserves identical or near-identical hash (Hamming Distance ≤ 4)."),
-        ("Computational Domain", "Byte-level cryptographic hash function.", "Frequency-domain 2D Discrete Cosine Transform (DCT-II).")
-    ]
-    for r_idx, (c0, c1, c2) in enumerate(h_rows, start=1):
-        for c_idx, val in enumerate([c0, c1, c2]):
-            cell = hash_tbl.cell(r_idx, c_idx)
-            set_cell_background(cell, "F7FAFC" if r_idx % 2 == 1 else "FFFFFF")
-            set_cell_margins(cell, top=70, bottom=70, left=90, right=90)
-            p = cell.paragraphs[0]
-            p.paragraph_format.space_after = Pt(0)
-            r = p.add_run(val)
-            r.font.size = Pt(8)
-    set_table_borders(hash_tbl, "CBD5E0")
-    doc.add_paragraph().paragraph_format.space_after = Pt(6)
-
     # -------------------------------------------------------------
-    # 3. Level 2: Intermediate — Pipelines, Tensors, Forensics & Cross-Verification
+    # 4. Part 2: Intermediate — Data Pipelines, Tensors & Deduplication (30 Mins)
     # -------------------------------------------------------------
-    add_heading_1(doc, "3. Level 2: Intermediate — Pipelines, Tensors & Cross-Verification (20 Mins)", color_rgb=(43, 108, 176))
+    add_heading_1(doc, "4. Part 2: Level 2 — Engineering Pipelines, Tensors & Deduplication (30 Mins)", color_rgb=(43, 108, 176))
 
     add_heading_2(doc, "Pointer 2.1: The Ingestion Problem — Why Raw Phone Photos Break Deep Learning")
     p = doc.add_paragraph()
@@ -379,9 +460,9 @@ def build_full_blueprint_doc(output_path: str):
     )
 
     # -------------------------------------------------------------
-    # 4. Level 3: Advanced — Synthetic AI Forensics & Signal Physics
+    # 5. Part 3: Advanced — Synthetic AI Forensics, Signal Physics & Decision Governance (25 Mins)
     # -------------------------------------------------------------
-    add_heading_1(doc, "4. Level 3: Advanced — Synthetic AI Forensics & Signal Physics (20 Mins)", color_rgb=(197, 48, 48))
+    add_heading_1(doc, "5. Part 3: Level 3 — Synthetic AI Forensics & Signal Physics (25 Mins)", color_rgb=(197, 48, 48))
 
     add_heading_2(doc, "Pointer 3.1: The Modern GenAI Threat — When Scammers Stop Stealing Photos")
     p = doc.add_paragraph()
@@ -448,17 +529,17 @@ def build_full_blueprint_doc(output_path: str):
     )
 
     # -------------------------------------------------------------
-    # 5. Live Demonstration Guide & Instructor Script
+    # 6. Part 4: Live Demonstration Runbook (90 Mins Total)
     # -------------------------------------------------------------
-    add_heading_1(doc, "5. Live Demonstration Script & Minute-by-Minute Runbook")
+    add_heading_1(doc, "6. Part 4: Live Demonstration Script & 90-Minute Masterclass Runbook")
     p = doc.add_paragraph()
     p.add_run(
-        "This instructor runbook maps each segment of the webinar to specific click actions and visual artifact demonstrations inside the live Streamlit workbench (http://localhost:8501):"
+        "This expanded instructor runbook maps the entire 90-minute lecture into six discrete pedagogical phases with specific click actions and live workbench demonstrations (http://localhost:8501):"
     )
 
-    demo_tbl = doc.add_table(rows=6, cols=3)
+    demo_tbl = doc.add_table(rows=7, cols=3)
     demo_tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-    dheaders = ["Timeline", "Application Action (http://localhost:8501)", "Speaker Narration & Pedagogical Focus"]
+    dheaders = ["Timeline (90 Min)", "Application Action (http://localhost:8501)", "Speaker Narration & Pedagogical Focus"]
     for idx, text in enumerate(dheaders):
         cell = demo_tbl.cell(0, idx)
         set_cell_background(cell, "1B365D")
@@ -470,16 +551,18 @@ def build_full_blueprint_doc(output_path: str):
         r.font.color.rgb = RGBColor(255, 255, 255)
 
     demo_data = [
-        ("Min 00 – 12", "Select 'Real Food: Authentic Mobile Delivery (iPhone 15)'", 
-         "Show genuine camera hardware EXIF (Apple A16 Bionic), natural photon shot noise, and continuous frequency scatter. Establish baseline of authenticity."),
-        ("Min 12 – 25", "Switch to Tab 0 ('Live Backend Decision Pipeline Flow')", 
-         "Walk through the Visual Memory-Map Flowchart. Point out how each stage transforms the input image to an output visual artifact (crop, spectrum, hash)."),
-        ("Min 25 – 38", "Select 'Synthetic: Meta AI Delivery Dish (User Case 2 / C2PA)'", 
-         "Show how the dish looks appetizing to human eyes, but the red C2PA synthetic media warning triggers instantly, bypassing the receipt gate directly to ₹0.00 lock."),
-        ("Min 38 – 48", "Select 'Synthetic: AI-Generated Indian Thali (User Case 1)'", 
-         "Show stripped EXIF and display the 2D FFT Log-Magnitude Spectrum in magma colormap. Highlight the steep radial drop-off and lack of sensor grain."),
-        ("Min 48 – 60", "Select 'Real Food: Deluxe Maharaja Thali (Real Platter)'", 
-         "Demonstrate multimodal receipt matching: photo is authentic camera capture, but discrepancy engine identifies thali delivered instead of dosa. Approve ₹309 refund.")
+        ("Min 00 – 15", "Open Workbench Landing Screen (Overview & Presets)", 
+         "Deliver the ₹100 Crore opening hook. Explain why food delivery platforms suffer massive leakage and establish the beginner definitions (pixels, RGB light, tensors, data pre-processing)."),
+        ("Min 15 – 30", "Select 'Real Food: Authentic Mobile Delivery (iPhone 15)'", 
+         "Show genuine camera hardware EXIF tags (Apple A16 Bionic lens). Explain EXIF orientation Tag 274, 3-channel canonicalization, and demonstrate why raw smartphone captures break deep models."),
+        ("Min 30 – 45", "Switch to Tab 0 ('Live Backend Decision Pipeline Flow')", 
+         "Walk through the Visual Memory-Map Flowchart. Demonstrate Stage 1 (dual intake) and Stage 2 (Resize 256, CenterCrop 224, ImageNet normalization). Contrast classical augmentation with generative corruption."),
+        ("Min 45 – 60", "Select 'Fraud: Recycled Duplicate (Known Fraud Ring)'", 
+         "Demonstrate Stage 4 (64-bit DCT pHash). Contrast cryptographic MD5 Avalanche Effect with perceptual frequency invariance. Show the 8x8 DCT bitplane heatmap and Hamming distance matching."),
+        ("Min 60 – 75", "Select 'Synthetic: Meta AI Delivery Dish (User Case 2 / C2PA)' & 'Synthetic: WhatsApp Diffusion'", 
+         "Show how photorealistic AI meals fool human eyes. Reveal the 2D FFT Log-Magnitude Spectrum in magma colormap and the lack of CMOS photon noise (PRNU). Demonstrate the C2PA XMP metadata trigger bypassing receipt verification to ₹0.00 lock."),
+        ("Min 75 – 90", "Select 'Real Food: Deluxe Maharaja Thali' + Open Interactive Q&A", 
+         "Demonstrate multimodal receipt matching: camera is authentic, but discrepancy engine identifies Maharaja Thali delivered instead of Masala Dosa. Approve ₹309 refund. Conduct interactive student checkpoint quiz and wrap up.")
     ]
     for r_idx, (c0, c1, c2) in enumerate(demo_data, start=1):
         for c_idx, val in enumerate([c0, c1, c2]):
@@ -494,9 +577,9 @@ def build_full_blueprint_doc(output_path: str):
     doc.add_paragraph().paragraph_format.space_after = Pt(8)
 
     # -------------------------------------------------------------
-    # 6. Interactive Student Checkpoint Questions & Answers
+    # 7. Interactive Student Checkpoint Questions & Answers
     # -------------------------------------------------------------
-    add_heading_1(doc, "6. Interactive Student Checkpoint Questions & Answers")
+    add_heading_1(doc, "7. Interactive Student Checkpoint Questions & Answers")
 
     qa_list = [
         ("Level 1 Checkpoint Question: Cryptographic vs. Perceptual Hashing",
@@ -505,7 +588,7 @@ def build_full_blueprint_doc(output_path: str):
         ("Level 2 Checkpoint Question: PyTorch Tensor Normalization",
          "Why do deep vision networks require image tensors to be normalized with mean and standard deviation instead of raw [0, 255] pixels?",
          "High integer pixel ranges [0, 255] cause activation explosions and erratic gradient updates in convolutional neural networks. Normalizing to zero-mean and unit variance stabilizes backpropagation and ensures balanced gradient flow across color channels."),
-        ("Level 2 Checkpoint Question: Temporal Windowing",
+        ("Level 2 Checkpoint Question: Temporal Windowing & Leakage",
          "What is temporal data leakage in customer dispute evidence, and how does the system prevent it?",
          "Temporal leakage occurs when an uploaded photo was taken before the order was placed or weeks after delivery. The system audits the EXIF DateTimeOriginal tag against the delivery window: Δt = t_photo - t_delivery ∈ [0, 7200s]. Negative values or excessive delays flag retroactive claim fraud."),
         ("Level 3 Checkpoint Question: Generative AI Optical Diffraction",
@@ -513,7 +596,10 @@ def build_full_blueprint_doc(output_path: str):
          "Optical diffraction through physical glass aperture blades and CMOS sensor Photo-Response Non-Uniformity (PRNU). Real cameras capture silicon photon noise grain and sustained high-frequency Nyquist diffraction, whereas diffusion decoders produce mathematical smoothness and periodic deconvolution checkerboard lattice harmonics."),
         ("Level 3 Checkpoint Question: C2PA Metadata Watermarking",
          "Why do standard Python image EXIF tools fail to detect Meta AI and Google Imagen synthetic provenance stamps?",
-         "Standard EXIF tools only inspect legacy TIFF camera header tags. Modern generative models store C2PA provenance inside embedded XMP XML packets (e.g., iptcExt:DigitalSourceType). Detecting these requires explicit XMP parsing or raw byte stream inspection.")
+         "Standard EXIF tools only inspect legacy TIFF camera header tags. Modern generative models store C2PA provenance inside embedded XMP XML packets (e.g., iptcExt:DigitalSourceType). Detecting these requires explicit XMP parsing or raw byte stream inspection."),
+        ("Level 3 Checkpoint Question: Asymmetric Error Cost in Fraud Detection",
+         "Why does the automated refund adjudicator treat False Positives (rejecting an honest customer) with vastly greater sensitivity than False Negatives?",
+         "Accusing a loyal customer of fraud destroys long-term customer lifetime value (LTV) and causes viral reputational damage, whereas refunding a single ₹150 fraudulent meal is a bounded financial loss. Multi-tiered gating balances these costs by sending borderline claims to manual review rather than hard-rejecting.")
     ]
 
     for q_title, q_text, a_text in qa_list:
@@ -530,9 +616,9 @@ def build_full_blueprint_doc(output_path: str):
         pa.add_run(a_text)
 
     # -------------------------------------------------------------
-    # 7. Verification & Repository Deliverables
+    # 8. Verification & Repository Deliverables
     # -------------------------------------------------------------
-    add_heading_1(doc, "7. Verification & Repository Deliverables")
+    add_heading_1(doc, "8. Verification & Repository Deliverables")
     p = doc.add_paragraph()
     p.add_run(
         "All pipelines, models, test suites, and interactive demonstrators referenced in this blueprint are fully functional and verified:\n"
